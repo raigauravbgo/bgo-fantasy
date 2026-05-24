@@ -257,33 +257,32 @@ export default function AdminPage() {
         `/api/competitions/${competition.slug}/players`
       );
 
-      // Pick players actually in entries — fall back to most expensive 11
-      const entryPlayerIds = new Set(data?.entries.flatMap((e) => e.playerIds) ?? []);
-      const inSquads = players.players.filter((p) => entryPlayerIds.has(p.id));
-      const pool = inSquads.length >= 11
-        ? inSquads.slice(0, 22)           // up to 22 players from squads
+      // Rank players by how many squads own them — score the most widely-owned
+      // so every squad gets at least some points
+      const entries = data?.entries ?? [];
+      const ownerCount: Record<string, number> = {};
+      for (const e of entries) {
+        for (const id of e.playerIds) ownerCount[id] = (ownerCount[id] ?? 0) + 1;
+      }
+
+      const pool = entries.length > 0
+        ? [...players.players]
+            .filter((p) => ownerCount[p.id])
+            .sort((a, b) => (ownerCount[b.id] ?? 0) - (ownerCount[a.id] ?? 0))
+            .slice(0, 44)   // top 44 most-owned — ensures coverage across all squads
         : [...players.players].sort((a, b) => b.price - a.price).slice(0, 22);
 
-      // Pick 1 GK, 4 DEF, 4 MID, 2 FWD from pool (or best available)
-      const byPos: Record<string, typeof pool> = { GK: [], DEF: [], MID: [], FWD: [] };
-      for (const p of pool) byPos[p.position]?.push(p);
-      const lineup = [
-        ...(byPos.GK.slice(0, 1)),
-        ...(byPos.DEF.slice(0, 4)),
-        ...(byPos.MID.slice(0, 4)),
-        ...(byPos.FWD.slice(0, 2)),
-      ].slice(0, 11);
-
-      const statItems = lineup.map((p, i) => ({
+      // Assign realistic dummy stats — goals/assists to the expensive stars, clean sheets to defenders
+      const statItems = pool.map((p, i) => ({
         playerId: p.id,
         started: true,
-        minutesPlayed: 90,
-        goals: i === 9 ? 2 : i === 10 ? 1 : 0,
-        assists: i === 7 ? 1 : i === 8 ? 1 : 0,
-        cleanSheet: i < 5,
-        goalsConceded: i < 5 ? 0 : undefined,
-        saves: p.position === "GK" ? 5 : 0,
-        yellowCards: i === 6 ? 1 : 0,
+        minutesPlayed: i < 22 ? 90 : 60,
+        goals: p.position === "FWD" && i < 6 ? (i === 0 ? 2 : 1) : p.position === "MID" && i < 4 ? 1 : 0,
+        assists: p.position === "MID" && i >= 4 && i < 8 ? 1 : p.position === "DEF" && i < 3 ? 1 : 0,
+        cleanSheet: (p.position === "GK" || p.position === "DEF") && i < 10,
+        goalsConceded: (p.position === "GK" || p.position === "DEF") && i >= 10 ? 1 : undefined,
+        saves: p.position === "GK" ? 4 : 0,
+        yellowCards: i === 15 ? 1 : 0,
         redCards: 0
       }));
       await apiFetch(`/api/admin/fixtures/${fixtureId}/stats/import`, {
