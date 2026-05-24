@@ -44,8 +44,19 @@ const STAR_PRICES: Record<string, number> = {
   "Taiwo Awoniyi": 7.0, "Emmanuel Dennis": 6.5, "Ivan Toney": 9.0,
 };
 
+// Pre-computed lowercase token lookup for fuzzy matching
+const STAR_PRICE_TOKENS: Array<{ tokens: string[]; price: number }> = Object.entries(STAR_PRICES).map(
+  ([k, v]) => ({ tokens: k.toLowerCase().split(/\s+/), price: v })
+);
+
 function playerPrice(name: string, pos: "GK" | "DEF" | "MID" | "FWD"): number {
+  const lower = name.toLowerCase();
+  // Exact match first
   if (STAR_PRICES[name]) return STAR_PRICES[name];
+  // Fuzzy: all tokens of the known name must appear somewhere in the player name
+  for (const { tokens, price } of STAR_PRICE_TOKENS) {
+    if (tokens.every((t) => lower.includes(t))) return price;
+  }
   return { GK: 5.0, DEF: 5.5, MID: 6.0, FWD: 7.0 }[pos];
 }
 
