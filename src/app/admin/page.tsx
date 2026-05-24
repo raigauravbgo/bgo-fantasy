@@ -21,7 +21,7 @@ type AdminEntry = { id: string; userId: string; name: string; budgetUsed: number
 type AdminUser = { id: string; name: string; email: string; role: string };
 
 type OverviewData = {
-  competition: { id: string; name: string; slug: string; registrationOpen: boolean; settings?: { budget?: number; maxPlayersPerTeam?: number } };
+  competition: { id: string; name: string; slug: string; registrationOpen: boolean; settings?: { budget?: number; squadSize?: number; maxPlayersPerTeam?: number } };
   teams: unknown[];
   players: AdminPlayer[];
   fixtures: { id: string; team1Name?: string; team2Name?: string; status: string }[];
@@ -171,6 +171,7 @@ export default function AdminPage() {
       slug: form.get("slug"),
       registrationOpen: form.get("registrationOpen") === "true",
       budget: Number(form.get("budget") || 100),
+      squadSize: Number(form.get("squadSize") || 15),
       maxPlayersPerTeam: Number(form.get("maxPlayersPerTeam") || 3)
     };
 
@@ -477,6 +478,17 @@ export default function AdminPage() {
                     defaultValue={data?.competition.settings?.budget ?? 100}
                   />
                 </div>
+                <div className="form-group">
+                  <label className="form-label">Squad size</label>
+                  <input
+                    className="form-input"
+                    name="squadSize"
+                    type="number"
+                    defaultValue={data?.competition.settings?.squadSize ?? 15}
+                  />
+                </div>
+              </div>
+              <div className="grid-2">
                 <div className="form-group">
                   <label className="form-label">Max players per team</label>
                   <input

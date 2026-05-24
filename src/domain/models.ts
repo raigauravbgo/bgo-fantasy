@@ -26,6 +26,7 @@ export type Competition = {
   lockDeadline: Date | null;
   settings: {
     budget?: number;
+    squadSize?: number;
     maxPlayersPerTeam?: number;
     predictionPointsMode?: "overall" | "separate";
     transferWindow?: TransferWindow | null;

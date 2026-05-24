@@ -16,6 +16,7 @@ const schema = z.object({
   lockDeadline: z.coerce.date().nullable().optional(),
   status: z.enum(["draft", "active", "completed", "archived"]).optional(),
   budget: z.number().positive().optional(),
+  squadSize: z.number().int().positive().optional(),
   maxPlayersPerTeam: z.number().int().positive().optional()
 });
 
@@ -40,6 +41,7 @@ export async function PUT(
       settings: {
         ...competition.settings,
         ...(input.budget !== undefined && { budget: input.budget }),
+        ...(input.squadSize !== undefined && { squadSize: input.squadSize }),
         ...(input.maxPlayersPerTeam !== undefined && {
           maxPlayersPerTeam: input.maxPlayersPerTeam
         })

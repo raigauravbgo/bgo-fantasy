@@ -14,9 +14,39 @@ function mapPosition(pos: string | null | undefined): "GK" | "DEF" | "MID" | "FW
   return "MID";
 }
 
-// Rough price by position — admins can tweak later
-function basePrice(pos: "GK" | "DEF" | "MID" | "FWD"): number {
-  return { GK: 5.5, DEF: 5.5, MID: 6.5, FWD: 7.5 }[pos];
+// Known star prices — everyone else gets position-based default
+const STAR_PRICES: Record<string, number> = {
+  // GKs
+  "Alisson Becker": 6.5, "David Raya": 6.0, "Jordan Pickford": 5.5,
+  "Nick Pope": 5.5, "Robert Sánchez": 5.0, "Ederson": 6.0,
+  // DEFs
+  "Trent Alexander-Arnold": 8.5, "Virgil van Dijk": 7.5, "Andrew Robertson": 7.0,
+  "Ibrahima Konaté": 6.5, "Ben White": 7.0, "William Saliba": 7.5,
+  "Oleksandr Zinchenko": 6.5, "Ben Chilwell": 6.0, "Reece James": 6.5,
+  "Ruben Dias": 7.0, "Kyle Walker": 6.5, "João Cancelo": 6.5,
+  "Pedro Porro": 6.0, "Destiny Udogie": 6.0, "Cristian Romero": 7.0,
+  "Micky van de Ven": 6.5, "Kieran Trippier": 7.0, "Sven Botman": 6.0,
+  "Dan Burn": 5.5, "Fabian Schär": 6.0,
+  // MIDs
+  "Mohamed Salah": 13.0, "Phil Foden": 10.5, "Kevin De Bruyne": 10.0,
+  "Bukayo Saka": 11.5, "Martin Ødegaard": 9.5, "Bernardo Silva": 9.0,
+  "Bruno Fernandes": 9.0, "Marcus Rashford": 8.5, "Mason Mount": 7.5,
+  "Declan Rice": 9.0, "Rodri": 9.5, "Alexis Mac Allister": 8.5,
+  "Dominik Szoboszlai": 8.5, "Harvey Elliott": 7.0, "Conor Gallagher": 7.0,
+  "James Maddison": 8.5, "Dejan Kulusevski": 8.0, "Son Heung-min": 10.0,
+  "Jarrod Bowen": 8.5, "Lucas Paquetá": 8.0, "Mohammed Kudus": 7.5,
+  "Eberechi Eze": 8.0, "Michael Olise": 9.0, "Adam Wharton": 6.0,
+  // FWDs
+  "Erling Haaland": 14.5, "Harry Kane": 13.0, "Ollie Watkins": 10.5,
+  "Cole Palmer": 11.5, "Nicolas Jackson": 9.0, "Alexander Isak": 10.5,
+  "Dominic Solanke": 7.5, "Richarlison": 8.0, "Callum Wilson": 7.5,
+  "Darwin Núñez": 9.5, "Roberto Firmino": 7.0, "Chris Wood": 7.0,
+  "Taiwo Awoniyi": 7.0, "Emmanuel Dennis": 6.5, "Ivan Toney": 9.0,
+};
+
+function playerPrice(name: string, pos: "GK" | "DEF" | "MID" | "FWD"): number {
+  if (STAR_PRICES[name]) return STAR_PRICES[name];
+  return { GK: 5.0, DEF: 5.5, MID: 6.0, FWD: 7.0 }[pos];
 }
 
 async function fdFetch<T>(path: string, apiKey: string): Promise<T> {
@@ -66,7 +96,7 @@ export async function POST(
           teamShortName: team.shortName,
           name: p.name,
           position: pos,
-          price: basePrice(pos),
+          price: playerPrice(p.name, pos),
           status: "available" as const
         };
       });

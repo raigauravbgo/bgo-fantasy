@@ -13,6 +13,7 @@ const schema = z.object({
   registrationOpen: z.boolean().default(true),
   lockDeadline: z.coerce.date().nullable().optional(),
   budget: z.number().positive().default(100),
+  squadSize: z.number().int().positive().default(15),
   maxPlayersPerTeam: z.number().int().positive().default(3)
 });
 
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
       lockDeadline: input.lockDeadline ?? null,
       settings: {
         budget: input.budget,
+        squadSize: input.squadSize,
         maxPlayersPerTeam: input.maxPlayersPerTeam,
         predictionPointsMode: "overall"
       }

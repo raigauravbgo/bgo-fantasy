@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import type { FantasyEntry, Player } from "@/lib/types";
+import { JerseyIcon } from "@/components/jersey-icon";
 
 const POSITION_ORDER = ["GK", "DEF", "MID", "FWD"] as const;
 type Position = (typeof POSITION_ORDER)[number];
@@ -34,7 +35,8 @@ function validateSquadClient(
   captainId: string,
   viceCaptainId: string,
   budget: number,
-  maxPerTeam: number
+  maxPerTeam: number,
+  squadSize: number
 ) {
   const errors: string[] = [];
   const budgetUsed = players.reduce((s, p) => s + p.price, 0);
@@ -47,8 +49,8 @@ function validateSquadClient(
     byCounts[team] = (byCounts[team] ?? 0) + 1;
   }
 
-  if (players.length !== SQUAD_SIZE)
-    errors.push(`Squad must contain exactly ${SQUAD_SIZE} players`);
+  if (players.length !== squadSize)
+    errors.push(`Squad must contain exactly ${squadSize} players`);
   if (budgetUsed > budget)
     errors.push(`Over budget by ${(budgetUsed - budget).toFixed(1)}`);
 
@@ -94,6 +96,7 @@ export default function SquadPage() {
 
   const budget = competition?.settings?.budget ?? DEFAULT_BUDGET;
   const maxPerTeam = competition?.settings?.maxPlayersPerTeam ?? 3;
+  const squadSize = competition?.settings?.squadSize ?? SQUAD_SIZE;
 
   useEffect(() => {
     if (!competition?.slug) return;
@@ -125,7 +128,7 @@ export default function SquadPage() {
   );
 
   const { errors, budgetUsed } = useMemo(
-    () => validateSquadClient(selectedPlayers, captainId, viceCaptainId, budget, maxPerTeam),
+    () => validateSquadClient(selectedPlayers, captainId, viceCaptainId, budget, maxPerTeam, squadSize),
     [selectedPlayers, captainId, viceCaptainId, budget, maxPerTeam]
   );
 
@@ -150,7 +153,7 @@ export default function SquadPage() {
         if (viceCaptainId === player.id) setViceCaptainId("");
         return curr.filter((id) => id !== player.id);
       }
-      if (curr.length >= SQUAD_SIZE) return curr;
+      if (curr.length >= squadSize) return curr;
       return [...curr, player.id];
     });
   }
@@ -197,7 +200,7 @@ export default function SquadPage() {
 
   // Constraint checklist items
   const constraints = [
-    { label: `Players: ${selectedIds.length}/${SQUAD_SIZE}`, met: selectedIds.length === SQUAD_SIZE },
+    { label: `Players: ${selectedIds.length}/${squadSize}`, met: selectedIds.length === squadSize },
     { label: `Budget: ${budgetUsed}/${budget}`, met: budgetUsed <= budget },
     ...POSITION_ORDER.map((pos) => {
       const count = squadByPosition[pos].length;
@@ -241,7 +244,7 @@ export default function SquadPage() {
             const isVC = viceCaptainId === player.id;
             const unavailable =
               player.status === "unavailable" ||
-              (!isSelected && selectedIds.length >= SQUAD_SIZE);
+              (!isSelected && selectedIds.length >= squadSize);
 
             return (
               <button
@@ -256,6 +259,9 @@ export default function SquadPage() {
                     {isCap && <span className="player-cap-label">C</span>}
                     {isVC && <span className="player-cap-label">VC</span>}
                   </div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "center", margin: "4px 0 2px" }}>
+                  <JerseyIcon tla={player.teamShortName ?? ""} size={34} />
                 </div>
                 <div className="player-name">{player.name}</div>
                 <div className="player-meta">
@@ -450,7 +456,7 @@ export default function SquadPage() {
       <div className="page-header">
         <h1 className="page-title">Squad Builder</h1>
         <p className="page-subtitle">
-          Pick 11 players within £{budget} · Captain earns 2× · Vice-captain earns 1.5×
+          Pick {squadSize} players within £{budget} · Captain earns 2× · Vice-captain earns 1.5×
         </p>
       </div>
 
@@ -466,7 +472,7 @@ export default function SquadPage() {
           className={`admin-tab ${mobileTab === "squad" ? "active" : ""}`}
           onClick={() => setMobileTab("squad")}
         >
-          My Squad ({selectedIds.length}/11)
+          My Squad ({selectedIds.length}/{squadSize})
         </button>
       </div>
 
