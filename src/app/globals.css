@@ -636,7 +636,7 @@ a {
 /* ─── Squad / Marketplace ────────────────────────────────────────────────── */
 .squad-layout {
   display: grid;
-  grid-template-columns: 1fr 360px;
+  grid-template-columns: 1fr 400px;
   gap: 20px;
   align-items: start;
 }
@@ -968,6 +968,176 @@ a {
 .squad-actions .btn,
 .squad-actions .btn-outline {
   flex: 1;
+}
+
+/* ─── Pitch View ─────────────────────────────────────────────────────────── */
+.squad-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.squad-budget-chip {
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.pitch-wrap {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid #166534;
+}
+
+.pitch-surface {
+  background: linear-gradient(180deg,
+    #16a34a 0%, #15803d 10%,
+    #16a34a 10%, #16a34a 20%,
+    #15803d 20%, #15803d 30%,
+    #16a34a 30%, #16a34a 40%,
+    #15803d 40%, #15803d 50%,
+    #16a34a 50%, #16a34a 60%,
+    #15803d 60%, #15803d 70%,
+    #16a34a 70%, #16a34a 80%,
+    #15803d 80%, #15803d 90%,
+    #16a34a 90%, #16a34a 100%
+  );
+  padding: 14px 6px 10px;
+  position: relative;
+}
+
+.pitch-centre-line {
+  border-top: 1px solid rgba(255,255,255,0.25);
+  left: 8%;
+  position: absolute;
+  right: 8%;
+  top: 50%;
+}
+
+.pitch-row {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.pitch-player {
+  align-items: center;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 56px;
+  max-width: 72px;
+  position: relative;
+  text-align: center;
+}
+
+.pitch-player.is-cap .pitch-armband { background: #eab308; color: #000; }
+.pitch-player.is-vc  .pitch-armband { background: var(--accent); color: var(--accent-ink); }
+
+.pitch-armband {
+  border-radius: 50%;
+  font-size: 0.55rem;
+  font-weight: 900;
+  height: 14px;
+  line-height: 14px;
+  position: absolute;
+  right: 6px;
+  top: 0;
+  width: 14px;
+}
+
+.pitch-player-name {
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.2;
+  max-width: 68px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+  white-space: nowrap;
+}
+
+.pitch-player-price {
+  background: rgba(0,0,0,0.55);
+  border-radius: 3px;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 1px 5px;
+}
+
+.pitch-player-actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.pitch-btn-cap {
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 3px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.6rem;
+  font-weight: 900;
+  min-height: 0;
+  padding: 1px 4px;
+}
+
+.pitch-btn-cap.active-cap { background: #eab308; border-color: #eab308; color: #000; }
+.pitch-btn-cap.active-vc  { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+.pitch-btn-remove {
+  background: rgba(200,0,0,0.6);
+  border: none;
+  border-radius: 3px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 900;
+  min-height: 0;
+  padding: 1px 4px;
+}
+
+.pitch-btn-remove:hover { background: rgba(220,0,0,0.9); }
+
+.pitch-slot-empty {
+  align-items: center;
+  background: rgba(0,0,0,0.25);
+  border: 1px dashed rgba(255,255,255,0.35);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 68px;
+  min-width: 56px;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.pitch-slot-empty:hover { background: rgba(0,0,0,0.4); }
+
+.pitch-slot-plus {
+  color: rgba(255,255,255,0.7);
+  font-size: 1.1rem;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.pitch-slot-pos {
+  color: rgba(255,255,255,0.55);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
 }
 
 /* ─── Leaderboard ────────────────────────────────────────────────────────── */

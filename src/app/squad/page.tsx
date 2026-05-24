@@ -282,17 +282,69 @@ export default function SquadPage() {
     </div>
   );
 
+  // Pitch player token — jersey + name + price/pts + C/VC/remove
+  function PitchPlayer({ p, isEmpty, pos }: { p?: Player; isEmpty?: true; pos: Position }) {
+    if (!p || isEmpty) {
+      return (
+        <div className="pitch-slot-empty" onClick={() => setPosFilter(pos)}>
+          <span className="pitch-slot-plus">+</span>
+          <span className="pitch-slot-pos">{pos}</span>
+        </div>
+      );
+    }
+    const isCap = captainId === p.id;
+    const isVC = viceCaptainId === p.id;
+    const multiplier = isCap ? 2 : isVC ? 1.5 : 1;
+    const effectivePts = p.totalPoints != null ? p.totalPoints * multiplier : null;
+    const shortName = p.name.split(" ").pop() ?? p.name;
+    return (
+      <div className={`pitch-player ${isCap ? "is-cap" : isVC ? "is-vc" : ""}`}>
+        <div style={{ position: "relative", display: "inline-block" }}>
+          <JerseyIcon tla={p.teamShortName ?? ""} size={40} />
+          {(isCap || isVC) && (
+            <span className="pitch-armband">{isCap ? "C" : "VC"}</span>
+          )}
+        </div>
+        <div className="pitch-player-name">{shortName}</div>
+        <div className="pitch-player-price">
+          {effectivePts != null && effectivePts !== 0
+            ? <span style={{ color: effectivePts > 0 ? "#4ade80" : "#f87171" }}>{effectivePts % 1 ? effectivePts.toFixed(1) : effectivePts}pts</span>
+            : <span>£{p.price}</span>
+          }
+        </div>
+        {!isLocked && (
+          <div className="pitch-player-actions">
+            <button className={`pitch-btn-cap ${isCap ? "active-cap" : ""}`} onClick={() => setCaptainId(isCap ? "" : p.id)} title="Captain">C</button>
+            <button className={`pitch-btn-cap ${isVC ? "active-vc" : ""}`} onClick={() => setViceCaptainId(isVC ? "" : p.id)} title="Vice-captain">V</button>
+            <button className="pitch-btn-remove" onClick={() => togglePlayer(p)} title="Remove">×</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function PitchRow({ pos, count }: { pos: Position; count: number }) {
+    const players = squadByPosition[pos];
+    return (
+      <div className="pitch-row">
+        {Array.from({ length: count }).map((_, i) =>
+          players[i]
+            ? <PitchPlayer key={players[i].id} p={players[i]} pos={pos} />
+            : <PitchPlayer key={`empty-${i}`} isEmpty pos={pos} />
+        )}
+      </div>
+    );
+  }
+
+  const gkCount = Math.max(squadByPosition.GK.length, POSITION_LIMITS.GK.min);
+  const defCount = Math.max(squadByPosition.DEF.length, POSITION_LIMITS.DEF.min);
+  const midCount = Math.max(squadByPosition.MID.length, POSITION_LIMITS.MID.min);
+  const fwdCount = Math.max(squadByPosition.FWD.length, POSITION_LIMITS.FWD.min);
+
   const SquadPanel = (
     <div className="squad-panel">
-      <div className="card-title">My Squad</div>
-
-      {isLocked ? (
-        <p className="notice" style={{ marginBottom: "12px" }}>
-          Squad is locked. Transfers open when admin opens a window.
-        </p>
-      ) : null}
-
-      <div className="squad-name-row">
+      {/* Header row */}
+      <div className="squad-header-bar">
         <input
           className="squad-name-input"
           disabled={!!isLocked}
@@ -300,146 +352,52 @@ export default function SquadPage() {
           value={squadName}
           onChange={(e) => setSquadName(e.target.value)}
         />
-      </div>
-
-      {/* Budget bar */}
-      <div className="budget-bar-wrap">
-        <div className="budget-bar-label">
-          <span>Budget used: £{budgetUsed}</span>
-          <span>£{budget} total</span>
-        </div>
-        <div className="budget-bar-track">
-          <div
-            className={`budget-bar-fill ${budgetUsed > budget ? "over" : ""}`}
-            style={{ width: `${Math.min((budgetUsed / budget) * 100, 100)}%` }}
-          />
+        <div className="squad-budget-chip" style={{ color: budgetUsed > budget ? "var(--error)" : undefined }}>
+          £{(budget - budgetUsed).toFixed(1)} left
         </div>
       </div>
 
-      {/* Squad by position */}
-      {POSITION_ORDER.map((pos) => {
-        const { min } = POSITION_LIMITS[pos];
-        const players = squadByPosition[pos];
-        const slots = Math.max(players.length, min);
+      {isLocked && (
+        <p className="notice" style={{ marginBottom: "10px", fontSize: "0.8rem" }}>
+          Squad is locked. Transfers open when admin opens a window.
+        </p>
+      )}
 
-        return (
-          <div key={pos} className="squad-section">
-            <div className="squad-section-label">{pos}</div>
-            {Array.from({ length: slots }).map((_, i) => {
-              const p = players[i];
-              if (!p) {
-                return (
-                  <div key={i} className="squad-slot-empty">
-                    + Add {pos}
-                  </div>
-                );
-              }
-              const isCap = captainId === p.id;
-              const isVC = viceCaptainId === p.id;
-              const multiplier = isCap ? 2 : isVC ? 1.5 : 1;
-              const effectivePts = p.totalPoints != null ? p.totalPoints * multiplier : null;
-              return (
-                <div key={p.id} className="squad-player-row">
-                  {positionBadge(p.position)}
-                  <div className="player-name">{p.name}</div>
-                  {effectivePts != null && (
-                    <span style={{
-                      marginLeft: "auto",
-                      fontSize: "0.78rem",
-                      fontWeight: 700,
-                      color: effectivePts > 0 ? "var(--success)" : effectivePts < 0 ? "var(--error)" : "var(--muted)",
-                      whiteSpace: "nowrap"
-                    }}>
-                      {effectivePts % 1 !== 0 ? effectivePts.toFixed(1) : effectivePts} pts
-                      {multiplier > 1 && (
-                        <span style={{ fontSize: "0.68rem", color: "var(--muted)", marginLeft: "3px" }}>
-                          ×{multiplier}
-                        </span>
-                      )}
-                    </span>
-                  )}
-                  {!isLocked && (
-                    <>
-                      <button
-                        className={`cap-btn ${isCap ? "is-cap" : ""}`}
-                        title="Set as captain (2× points)"
-                        onClick={() =>
-                          setCaptainId(isCap ? "" : p.id)
-                        }
-                      >
-                        C
-                      </button>
-                      <button
-                        className={`cap-btn ${isVC ? "is-vc" : ""}`}
-                        title="Set as vice-captain (1.5× points)"
-                        onClick={() =>
-                          setViceCaptainId(isVC ? "" : p.id)
-                        }
-                      >
-                        VC
-                      </button>
-                      <button
-                        className="squad-remove-btn"
-                        onClick={() => togglePlayer(p)}
-                        title="Remove"
-                      >
-                        ×
-                      </button>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        );
-      })}
-
-      {/* Points total */}
-      {selectedPlayers.some((p) => p.totalPoints != null) && (() => {
-        const total = selectedPlayers.reduce((sum, p) => {
-          if (p.totalPoints == null) return sum;
-          const m = p.id === captainId ? 2 : p.id === viceCaptainId ? 1.5 : 1;
-          return sum + p.totalPoints * m;
-        }, 0);
-        return (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: "1px solid var(--border)", marginTop: "8px" }}>
-            <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>Total squad points</span>
-            <span style={{ fontWeight: 800, fontSize: "1.05rem", color: "var(--accent)" }}>
-              {total % 1 !== 0 ? total.toFixed(1) : total}
-            </span>
-          </div>
-        );
-      })()}
+      {/* Pitch */}
+      <div className="pitch-wrap">
+        <div className="pitch-surface">
+          {/* centre circle */}
+          <div className="pitch-centre-line" />
+          <PitchRow pos="FWD" count={fwdCount} />
+          <PitchRow pos="MID" count={midCount} />
+          <PitchRow pos="DEF" count={defCount} />
+          <PitchRow pos="GK"  count={gkCount}  />
+        </div>
+      </div>
 
       {/* Constraint checklist */}
-      <div className="constraint-checklist">
+      <div className="constraint-checklist" style={{ marginTop: "10px" }}>
         {constraints.map((c, i) => (
-          <div key={i} className={`constraint-item ${c.met ? "met" : ""}`}>
-            {c.label}
-          </div>
+          <div key={i} className={`constraint-item ${c.met ? "met" : ""}`}>{c.label}</div>
         ))}
       </div>
 
-      {notice ? (
-        <p className={`notice ${notice.type === "err" ? "notice-error" : ""}`}>
+      {notice && (
+        <p className={`notice ${notice.type === "err" ? "notice-error" : ""}`} style={{ marginTop: "8px" }}>
           {notice.msg}
         </p>
-      ) : null}
+      )}
 
       {!isLocked && (
         <div className="squad-actions">
-          <button
-            className="btn-outline"
-            disabled={saving}
-            onClick={() => saveSquad(false)}
-          >
+          <button className="btn-outline" disabled={saving} onClick={() => saveSquad(false)}>
             {saving ? "Saving…" : "Save"}
           </button>
           <button
             className="btn"
             disabled={saving || !isValid}
             onClick={() => {
-              if (confirm("Are you sure you want to lock your squad? This cannot be undone without an admin transfer window.")) {
+              if (confirm("Lock your squad? You won't be able to change it without an admin transfer window.")) {
                 void saveSquad(true);
               }
             }}

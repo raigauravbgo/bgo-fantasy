@@ -94,7 +94,8 @@ export function platformRepository() {
           items.map((item) => {
             const id = item.id ?? newId();
             return prisma.player.upsert({
-              where: { competitionId_name: { competitionId: item.competitionId, name: item.name } },
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              where: { competitionId_name: { competitionId: item.competitionId, name: item.name } } as any,
               update: { teamId: item.teamId, teamName: item.teamName, teamShortName: item.teamShortName, position: item.position, price: item.price, status: item.status },
               create: { id, competitionId: item.competitionId, teamId: item.teamId, name: item.name, teamName: item.teamName, teamShortName: item.teamShortName, position: item.position, price: item.price, status: item.status }
             });
@@ -295,9 +296,10 @@ export function platformRepository() {
 
     audit: {
       async create(input: Omit<AuditLog, "id" | "createdAt">): Promise<AuditLog> {
-        return prisma.auditLog.create({
-          data: { id: newId(), createdAt: new Date(), ...input, before: input.before as object, after: input.after as object }
-        }) as Promise<AuditLog>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (prisma.auditLog.create({
+          data: { id: newId(), createdAt: new Date(), ...input, before: input.before as object, after: input.after as object } as any
+        })) as Promise<AuditLog>;
       },
       async list(competitionId?: string): Promise<AuditLog[]> {
         return prisma.auditLog.findMany({

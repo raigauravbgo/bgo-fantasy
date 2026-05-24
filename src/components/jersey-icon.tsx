@@ -1,55 +1,89 @@
-// Team jersey colors for PL clubs (primary, sleeve)
-const TEAM_COLORS: Record<string, [string, string]> = {
-  ARS: ["#EF0107", "#ffffff"],
-  AVL: ["#95BFE5", "#670E36"],
-  BOU: ["#DA291C", "#000000"],
-  BHA: ["#0057B8", "#ffffff"],
-  BRE: ["#e30613", "#ffffff"],
-  CHE: ["#034694", "#ffffff"],
-  CRY: ["#1B458F", "#C4122E"],
-  EVE: ["#003399", "#ffffff"],
-  FUL: ["#ffffff", "#000000"],
-  IPS: ["#0044A9", "#ffffff"],
-  LEI: ["#003090", "#fdbe11"],
-  LIV: ["#C8102E", "#ffffff"],
-  MCI: ["#6CABDD", "#1C2C5B"],
-  MUN: ["#DA291C", "#FBE122"],
-  NEW: ["#241F20", "#ffffff"],
-  NOT: ["#DD0000", "#ffffff"],
-  SOU: ["#D71920", "#ffffff"],
-  TOT: ["#132257", "#ffffff"],
-  WHU: ["#7A263A", "#1BB1E7"],
-  WOL: ["#FDB913", "#231F20"],
-  // fallback
-  DEFAULT: ["#888888", "#cccccc"],
+// Primary + secondary colours for all 20 PL clubs
+const TEAM_COLORS: Record<string, { primary: string; secondary: string; pattern?: "stripes" | "hoops" | "sash" | "plain" }> = {
+  ARS: { primary: "#EF0107", secondary: "#ffffff", pattern: "plain" },
+  AVL: { primary: "#670E36", secondary: "#95BFE5", pattern: "plain" },
+  BOU: { primary: "#000000", secondary: "#DA291C", pattern: "stripes" },
+  BHA: { primary: "#0057B8", secondary: "#ffffff", pattern: "stripes" },
+  BRE: { primary: "#e30613", secondary: "#ffffff", pattern: "stripes" },
+  CHE: { primary: "#034694", secondary: "#ffffff", pattern: "plain" },
+  CRY: { primary: "#1B458F", secondary: "#C4122E", pattern: "sash" },
+  EVE: { primary: "#003399", secondary: "#ffffff", pattern: "plain" },
+  FUL: { primary: "#ffffff", secondary: "#000000", pattern: "plain" },
+  IPS: { primary: "#0044A9", secondary: "#ffffff", pattern: "plain" },
+  LEI: { primary: "#003090", secondary: "#fdbe11", pattern: "plain" },
+  LIV: { primary: "#C8102E", secondary: "#ffffff", pattern: "plain" },
+  MCI: { primary: "#6CABDD", secondary: "#1C2C5B", pattern: "plain" },
+  MUN: { primary: "#DA291C", secondary: "#000000", pattern: "plain" },
+  NEW: { primary: "#241F20", secondary: "#ffffff", pattern: "stripes" },
+  NOT: { primary: "#DD0000", secondary: "#ffffff", pattern: "plain" },
+  SOU: { primary: "#D71920", secondary: "#ffffff", pattern: "stripes" },
+  TOT: { primary: "#132257", secondary: "#ffffff", pattern: "plain" },
+  WHU: { primary: "#7A263A", secondary: "#1BB1E7", pattern: "plain" },
+  WOL: { primary: "#FDB913", secondary: "#231F20", pattern: "plain" },
 };
 
-export function JerseyIcon({ tla, size = 36 }: { tla: string; size?: number }) {
-  const [primary, sleeve] = TEAM_COLORS[tla] ?? TEAM_COLORS.DEFAULT;
+const DEFAULT = { primary: "#6b7280", secondary: "#d1d5db", pattern: "plain" as const };
+
+export function JerseyIcon({ tla, size = 44 }: { tla: string; size?: number }) {
+  const cfg = TEAM_COLORS[tla] ?? DEFAULT;
+  const { primary, secondary, pattern } = cfg;
+  const s = size;
+  const r = s / 44; // scale ratio
+
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 36 36"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      {/* body */}
+    <svg width={s} height={s} viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        {pattern === "stripes" && (
+          <pattern id={`stripe-${tla}`} patternUnits="userSpaceOnUse" width="4" height="44">
+            <rect width="2" height="44" fill={primary} />
+            <rect x="2" width="2" height="44" fill={secondary} />
+          </pattern>
+        )}
+        {pattern === "hoops" && (
+          <pattern id={`hoops-${tla}`} patternUnits="userSpaceOnUse" width="44" height="6">
+            <rect width="44" height="3" fill={primary} />
+            <rect y="3" width="44" height="3" fill={secondary} />
+          </pattern>
+        )}
+      </defs>
+
+      {/* ── body ── */}
       <path
-        d="M10 8 L4 14 L8 16 L8 30 L28 30 L28 16 L32 14 L26 8 C24 11 20 12 18 12 C16 12 12 11 10 8Z"
-        fill={primary}
+        d="M13 10 L5 18 L10 20 L10 37 L34 37 L34 20 L39 18 L31 10 C29 14 25.5 15.5 22 15.5 C18.5 15.5 15 14 13 10Z"
+        fill={
+          pattern === "stripes" ? `url(#stripe-${tla})` :
+          pattern === "hoops"   ? `url(#hoops-${tla})` :
+          primary
+        }
+        stroke={secondary === "#ffffff" ? "#e5e7eb" : secondary}
+        strokeWidth="0.5"
       />
-      {/* sleeves */}
-      <path d="M4 14 L8 16 L10 8 Z" fill={sleeve} />
-      <path d="M32 14 L28 16 L26 8 Z" fill={sleeve} />
-      {/* collar */}
+
+      {/* ── sash overlay ── */}
+      {pattern === "sash" && (
+        <path
+          d="M13 10 L31 10 L34 37 L22 37 Z"
+          fill={secondary}
+          opacity="0.45"
+        />
+      )}
+
+      {/* ── sleeves ── */}
+      <path d="M5 18 L10 20 L13 10 Z" fill={secondary} stroke={secondary === "#ffffff" ? "#e5e7eb" : secondary} strokeWidth="0.4" />
+      <path d="M39 18 L34 20 L31 10 Z" fill={secondary} stroke={secondary === "#ffffff" ? "#e5e7eb" : secondary} strokeWidth="0.4" />
+
+      {/* ── collar ── */}
       <path
-        d="M14 8 Q18 13 22 8"
-        stroke="#00000033"
-        strokeWidth="1"
+        d="M17 10 Q22 16 27 10"
+        stroke={secondary}
+        strokeWidth="1.5"
         fill="none"
+        strokeLinecap="round"
       />
+
+      {/* ── sleeve cuffs ── */}
+      <line x1="5.5" y1="18" x2="9.5" y2="19.5" stroke={primary} strokeWidth="1.2" strokeLinecap="round" />
+      <line x1="38.5" y1="18" x2="34.5" y2="19.5" stroke={primary} strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   );
 }
