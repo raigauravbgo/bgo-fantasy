@@ -89,6 +89,8 @@ export default function AdminPage() {
   const [team2Score, setTeam2Score] = useState(0);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvFixtureId, setCsvFixtureId] = useState("");
+  const [plImporting, setPlImporting] = useState(false);
+  const [plResult, setPlResult] = useState<string | null>(null);
 
   // Player editing state
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -191,16 +193,21 @@ export default function AdminPage() {
   }
 
   async function importPremierLeague() {
-    if (!competition?.id) { showNotice("Create a competition first.", "err"); return; }
-    await run("Importing Premier League data…", async () => {
+    if (!competition?.id) { setPlResult("No competition selected — create one first."); return; }
+    setPlImporting(true);
+    setPlResult(null);
+    try {
       const result = await apiFetch<{ imported: { teams: number; players: number; fixtures: number } }>(
         `/api/admin/competitions/${competition.id}/import-pl`,
         { method: "POST" }
       );
-      showNotice(
-        `Done — ${result.imported.teams} teams, ${result.imported.players} players, ${result.imported.fixtures} fixtures imported.`
-      );
-    });
+      setPlResult(`Done — ${result.imported.teams} teams, ${result.imported.players} players, ${result.imported.fixtures} fixtures.`);
+      void loadOverview(competition.id);
+    } catch (err) {
+      setPlResult(err instanceof Error ? err.message : "Import failed.");
+    } finally {
+      setPlImporting(false);
+    }
   }
 
   async function importSampleData() {
@@ -506,9 +513,14 @@ export default function AdminPage() {
               football-data.org. Requires <code>FOOTBALL_DATA_API_KEY</code> env var.
               Safe to re-run — existing records are updated, not duplicated.
             </p>
-            <button className="btn" onClick={importPremierLeague} disabled={!!running}>
-              {running === "Importing Premier League data…" ? "Importing…" : "Import Premier League"}
+            <button className="btn" onClick={importPremierLeague} disabled={plImporting}>
+              {plImporting ? "Importing…" : "Import Premier League"}
             </button>
+            {plResult && (
+              <p className={`notice ${plResult.startsWith("Done") ? "" : "notice-error"}`} style={{ marginTop: "12px" }}>
+                {plResult}
+              </p>
+            )}
           </div>
 
           <div className="card">
