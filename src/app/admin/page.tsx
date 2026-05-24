@@ -211,6 +211,17 @@ export default function AdminPage() {
     }
   }
 
+  async function seedSquads() {
+    if (!competition?.id) return;
+    await run("Dummy squads seeded", async () => {
+      const result = await apiFetch<{ created: string[]; password: string }>(
+        "/api/admin/seed-squads",
+        { method: "POST", body: { competitionId: competition.id } }
+      );
+      showNotice(`Created: ${result.created.join(", ")} — password: ${result.password}`);
+    });
+  }
+
   async function importSampleData() {
     if (!competition?.id || !competition.slug) return;
     await run("Sample data imported", async () => {
@@ -548,11 +559,16 @@ export default function AdminPage() {
               </span>
             </div>
             <p className="card-muted" style={{ marginBottom: "14px" }}>
-              Populates sample teams, players, and fixtures for testing.
+              Populates sample teams, players, and fixtures for testing. Seed squads creates 5 dummy users (password: <code>password123</code>).
             </p>
-            <button className="btn-outline" onClick={importSampleData} disabled={!!running}>
-              Import sample roster &amp; fixtures
-            </button>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button className="btn-outline" onClick={importSampleData} disabled={!!running}>
+                Import sample roster &amp; fixtures
+              </button>
+              <button className="btn-outline" onClick={seedSquads} disabled={!!running}>
+                Seed 5 dummy squads
+              </button>
+            </div>
           </div>
         </div>
       )}
