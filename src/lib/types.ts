@@ -14,6 +14,7 @@ export type Competition = {
   lockDeadline: string | null;
   settings?: {
     budget?: number;
+    squadSize?: number;
     maxPlayersPerTeam?: number;
     transferWindow?: {
       active: boolean;
