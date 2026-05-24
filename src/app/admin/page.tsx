@@ -81,6 +81,7 @@ export default function AdminPage() {
   const [tab, setTab] = useState<"overview" | "competition" | "players" | "scoring" | "transfers" | "announcements">("overview");
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [running, setRunning] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [selectedFixtureId, setSelectedFixtureId] = useState("");
@@ -148,12 +149,15 @@ export default function AdminPage() {
 
   async function run(label: string, fn: () => Promise<void>) {
     setNotice(null);
+    setRunning(label);
     try {
       await fn();
       showNotice(`${label} — done.`);
       if (competition?.id) void loadOverview(competition.id);
     } catch (err) {
       showNotice(err instanceof Error ? err.message : `${label} failed.`, "err");
+    } finally {
+      setRunning(null);
     }
   }
 
@@ -187,14 +191,14 @@ export default function AdminPage() {
   }
 
   async function importPremierLeague() {
-    if (!competition?.id) return;
-    await run("Premier League imported", async () => {
+    if (!competition?.id) { showNotice("Create a competition first.", "err"); return; }
+    await run("Importing Premier League data…", async () => {
       const result = await apiFetch<{ imported: { teams: number; players: number; fixtures: number } }>(
         `/api/admin/competitions/${competition.id}/import-pl`,
         { method: "POST" }
       );
       showNotice(
-        `Imported ${result.imported.teams} teams, ${result.imported.players} players, ${result.imported.fixtures} fixtures.`
+        `Done — ${result.imported.teams} teams, ${result.imported.players} players, ${result.imported.fixtures} fixtures imported.`
       );
     });
   }
@@ -337,7 +341,11 @@ export default function AdminPage() {
         </p>
       </div>
 
-      {notice ? (
+      {running ? (
+        <div className="notice" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span className="loading-dots" style={{ fontSize: "0.85rem" }}>{running}</span>
+        </div>
+      ) : notice ? (
         <p className={`notice ${notice.type === "err" ? "notice-error" : ""}`}>
           {notice.msg}
         </p>
@@ -498,8 +506,8 @@ export default function AdminPage() {
               football-data.org. Requires <code>FOOTBALL_DATA_API_KEY</code> env var.
               Safe to re-run — existing records are updated, not duplicated.
             </p>
-            <button className="btn" onClick={importPremierLeague}>
-              Import Premier League
+            <button className="btn" onClick={importPremierLeague} disabled={!!running}>
+              {running === "Importing Premier League data…" ? "Importing…" : "Import Premier League"}
             </button>
           </div>
 
@@ -518,7 +526,7 @@ export default function AdminPage() {
             <p className="card-muted" style={{ marginBottom: "14px" }}>
               Populates sample teams, players, and fixtures for testing.
             </p>
-            <button className="btn-outline" onClick={importSampleData}>
+            <button className="btn-outline" onClick={importSampleData} disabled={!!running}>
               Import sample roster &amp; fixtures
             </button>
           </div>
@@ -687,11 +695,11 @@ export default function AdminPage() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <button className="btn-outline" onClick={openPrediction}>
+                <button className="btn-outline" onClick={openPrediction} disabled={!!running}>
                   Open match-winner prediction
                 </button>
-                <button className="btn" onClick={publishScoring}>
-                  Import &amp; publish sample scoring
+                <button className="btn" onClick={publishScoring} disabled={!!running}>
+                  {running ? "Running…" : "Import & publish sample scoring"}
                 </button>
               </div>
               <p className="form-hint">
@@ -706,8 +714,8 @@ export default function AdminPage() {
               Re-runs scoring for every completed fixture in this competition. Safe to run
               multiple times — existing points are replaced, not doubled.
             </p>
-            <button className="btn" onClick={recalculateAll}>
-              Recalculate full competition
+            <button className="btn" onClick={recalculateAll} disabled={!!running}>
+              {running ? "Running…" : "Recalculate full competition"}
             </button>
           </div>
 
