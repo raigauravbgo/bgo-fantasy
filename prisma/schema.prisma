@@ -85,6 +85,8 @@ model Player {
   team         Team           @relation(fields: [teamId], references: [id])
   rawStats     RawStat[]
   playerPoints PlayerPoints[]
+
+  @@unique([competitionId, name])
 }
 
 model Fixture {

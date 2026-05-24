@@ -65,17 +65,17 @@ export function platformRepository() {
         return prisma.team.findMany({ where: { competitionId }, orderBy: { name: "asc" } }) as Promise<Team[]>;
       },
       async upsertMany(items: Array<Omit<Team, "id"> & { id?: string }>) {
-        const docs = items.map((item) => ({ id: item.id ?? newId(), ...item }));
-        await Promise.all(
-          docs.map((t) =>
-            prisma.team.upsert({
-              where: { competitionId_shortName: { competitionId: t.competitionId, shortName: t.shortName } },
-              update: { name: t.name, countryCode: t.countryCode, logoUrl: t.logoUrl },
-              create: { id: t.id, competitionId: t.competitionId, name: t.name, shortName: t.shortName, countryCode: t.countryCode, logoUrl: t.logoUrl }
-            })
-          )
+        const results = await Promise.all(
+          items.map((item) => {
+            const id = item.id ?? newId();
+            return prisma.team.upsert({
+              where: { competitionId_shortName: { competitionId: item.competitionId, shortName: item.shortName } },
+              update: { name: item.name, countryCode: item.countryCode, logoUrl: item.logoUrl },
+              create: { id, competitionId: item.competitionId, name: item.name, shortName: item.shortName, countryCode: item.countryCode, logoUrl: item.logoUrl }
+            });
+          })
         );
-        return docs as Team[];
+        return results as Team[];
       }
     },
 
@@ -90,17 +90,17 @@ export function platformRepository() {
         return prisma.player.findMany({ where: { id: { in: ids } } }) as Promise<Player[]>;
       },
       async upsertMany(items: Array<Omit<Player, "id"> & { id?: string }>) {
-        const docs = items.map((item) => ({ id: item.id ?? newId(), ...item }));
-        await Promise.all(
-          docs.map((p) =>
-            prisma.player.upsert({
-              where: { id: p.id },
-              update: { name: p.name, teamId: p.teamId, teamName: p.teamName, teamShortName: p.teamShortName, position: p.position, price: p.price, status: p.status },
-              create: { id: p.id, competitionId: p.competitionId, teamId: p.teamId, name: p.name, teamName: p.teamName, teamShortName: p.teamShortName, position: p.position, price: p.price, status: p.status }
-            })
-          )
+        const results = await Promise.all(
+          items.map((item) => {
+            const id = item.id ?? newId();
+            return prisma.player.upsert({
+              where: { competitionId_name: { competitionId: item.competitionId, name: item.name } },
+              update: { teamId: item.teamId, teamName: item.teamName, teamShortName: item.teamShortName, position: item.position, price: item.price, status: item.status },
+              create: { id, competitionId: item.competitionId, teamId: item.teamId, name: item.name, teamName: item.teamName, teamShortName: item.teamShortName, position: item.position, price: item.price, status: item.status }
+            });
+          })
         );
-        return docs as Player[];
+        return results as Player[];
       },
       async update(id: string, patch: Partial<Pick<Player, "price" | "position" | "status">>) {
         return prisma.player.update({ where: { id }, data: patch }) as Promise<Player>;
