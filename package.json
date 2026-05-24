@@ -8,7 +8,7 @@
     "build": "prisma generate && next build",
     "db:migrate": "prisma migrate deploy",
     "db:push": "prisma db push",
-    "start": "prisma db push && next start",
+    "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
