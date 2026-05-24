@@ -253,19 +253,37 @@ export default function AdminPage() {
     if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
     await run("Scoring published", async () => {
       if (!competition?.slug) return;
-      const players = await apiFetch<{ players: { id: string; position: string }[] }>(
+      const players = await apiFetch<{ players: { id: string; position: string; price: number }[] }>(
         `/api/competitions/${competition.slug}/players`
       );
-      const statItems = players.players.slice(0, 11).map((p, i) => ({
+
+      // Pick players actually in entries — fall back to most expensive 11
+      const entryPlayerIds = new Set(data?.entries.flatMap((e) => e.playerIds) ?? []);
+      const inSquads = players.players.filter((p) => entryPlayerIds.has(p.id));
+      const pool = inSquads.length >= 11
+        ? inSquads.slice(0, 22)           // up to 22 players from squads
+        : [...players.players].sort((a, b) => b.price - a.price).slice(0, 22);
+
+      // Pick 1 GK, 4 DEF, 4 MID, 2 FWD from pool (or best available)
+      const byPos: Record<string, typeof pool> = { GK: [], DEF: [], MID: [], FWD: [] };
+      for (const p of pool) byPos[p.position]?.push(p);
+      const lineup = [
+        ...(byPos.GK.slice(0, 1)),
+        ...(byPos.DEF.slice(0, 4)),
+        ...(byPos.MID.slice(0, 4)),
+        ...(byPos.FWD.slice(0, 2)),
+      ].slice(0, 11);
+
+      const statItems = lineup.map((p, i) => ({
         playerId: p.id,
         started: true,
         minutesPlayed: 90,
-        goals: i === 8 ? 1 : 0,
-        assists: i === 6 ? 1 : 0,
-        cleanSheet: i < 4,
-        goalsConceded: i < 4 ? 0 : undefined,
-        saves: p.position === "GK" ? 4 : 0,
-        yellowCards: 0,
+        goals: i === 9 ? 2 : i === 10 ? 1 : 0,
+        assists: i === 7 ? 1 : i === 8 ? 1 : 0,
+        cleanSheet: i < 5,
+        goalsConceded: i < 5 ? 0 : undefined,
+        saves: p.position === "GK" ? 5 : 0,
+        yellowCards: i === 6 ? 1 : 0,
         redCards: 0
       }));
       await apiFetch(`/api/admin/fixtures/${fixtureId}/stats/import`, {
