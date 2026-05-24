@@ -220,7 +220,7 @@ export type Announcement = {
 
 export type AuditLog = {
   id: AppId;
-  actorUserId: AppId;
+  actorUserId: AppId | null;
   action: string;
   entityType: string;
   entityId?: AppId;

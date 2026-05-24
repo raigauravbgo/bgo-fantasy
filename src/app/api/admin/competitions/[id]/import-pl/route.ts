@@ -98,7 +98,7 @@ export async function POST(
     const savedFixtures = await repo.fixtures.upsertMany(fixtureItems);
 
     await repo.audit.create({
-      actorUserId: "system",
+      actorUserId: null,
       action: "import.premier-league",
       entityType: "competition",
       entityId: competitionId,

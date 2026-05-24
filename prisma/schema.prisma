@@ -255,7 +255,7 @@ model Announcement {
 
 model AuditLog {
   id            String   @id
-  actorUserId   String
+  actorUserId   String?
   action        String
   entityType    String
   entityId      String?
@@ -264,6 +264,6 @@ model AuditLog {
   after         Json?
   createdAt     DateTime @default(now())
 
-  actor       User         @relation(fields: [actorUserId], references: [id])
+  actor       User?        @relation(fields: [actorUserId], references: [id])
   competition Competition? @relation(fields: [competitionId], references: [id])
 }
