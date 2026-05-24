@@ -186,6 +186,19 @@ export default function AdminPage() {
     }
   }
 
+  async function importPremierLeague() {
+    if (!competition?.id) return;
+    await run("Premier League imported", async () => {
+      const result = await apiFetch<{ imported: { teams: number; players: number; fixtures: number } }>(
+        `/api/admin/competitions/${competition.id}/import-pl`,
+        { method: "POST" }
+      );
+      showNotice(
+        `Imported ${result.imported.teams} teams, ${result.imported.players} players, ${result.imported.fixtures} fixtures.`
+      );
+    });
+  }
+
   async function importSampleData() {
     if (!competition?.id || !competition.slug) return;
     await run("Sample data imported", async () => {
@@ -476,6 +489,18 @@ export default function AdminPage() {
                 </button>
               </div>
             </form>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Import Premier League Data</div>
+            <p className="card-muted" style={{ marginBottom: "14px" }}>
+              Pulls all 20 PL teams, their squads, and upcoming fixtures from
+              football-data.org. Requires <code>FOOTBALL_DATA_API_KEY</code> env var.
+              Safe to re-run — existing records are updated, not duplicated.
+            </p>
+            <button className="btn" onClick={importPremierLeague}>
+              Import Premier League
+            </button>
           </div>
 
           <div className="card">
