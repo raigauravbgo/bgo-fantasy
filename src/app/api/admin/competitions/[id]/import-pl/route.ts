@@ -115,22 +115,34 @@ export async function POST(
 
     const savedPlayers = await repo.players.upsertMany(playerItems);
 
-    // 3. Fetch upcoming fixtures (next 30)
-    const matchesData = await fdFetch<{ matches: FdMatch[] }>(
+    // 3. Fetch fixtures — try scheduled first, fall back to last 38 finished matches
+    let rawMatches: FdMatch[] = [];
+    const scheduled = await fdFetch<{ matches: FdMatch[] }>(
       "/competitions/PL/matches?status=SCHEDULED&limit=30",
       apiKey
     );
+    rawMatches = scheduled.matches;
 
-    const fixtureItems = matchesData.matches.map((m) => {
+    if (rawMatches.length === 0) {
+      // Off-season: use last season's finished matches for testing
+      const finished = await fdFetch<{ matches: FdMatch[] }>(
+        "/competitions/PL/matches?status=FINISHED&limit=38&season=2024",
+        apiKey
+      );
+      rawMatches = finished.matches;
+    }
+
+    const fixtureItems = rawMatches.map((m) => {
       const team1 = teamByTla.get(m.homeTeam.tla);
       const team2 = teamByTla.get(m.awayTeam.tla);
+      const isFinished = m.status === "FINISHED";
       return {
         competitionId,
         team1Id: team1?.id ?? savedTeams[0].id,
         team2Id: team2?.id ?? savedTeams[1].id,
         team1Name: m.homeTeam.name,
         team2Name: m.awayTeam.name,
-        status: "upcoming" as const,
+        status: isFinished ? ("completed" as const) : ("upcoming" as const),
         startTime: new Date(m.utcDate),
         venue: m.venue ?? undefined
       };
@@ -168,6 +180,7 @@ type FdTeam = {
 
 type FdMatch = {
   utcDate: string;
+  status: string;
   venue: string | null;
   homeTeam: { tla: string; name: string };
   awayTeam: { tla: string; name: string };
