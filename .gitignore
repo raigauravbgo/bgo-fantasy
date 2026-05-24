@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+.next-dev/
+out/
+
+# production
+dist/
+build/
+
+# testing
+coverage/
+test-results/
+playwright-report/
+
+# environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+secrets/
+
+# local data and exports
+exports/
+*.csv
+!docs/**/*.csv
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

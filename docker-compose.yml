@@ -1,0 +1,11 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: bgo-games-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - bgo_games_mongo:/data/db
+
+volumes:
+  bgo_games_mongo:

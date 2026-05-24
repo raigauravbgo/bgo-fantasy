@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id
+  name         String
+  email        String   @unique
+  employeeId   String?  @unique
+  passwordHash String
+  role         String   @default("player")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  entries          FantasyEntry[]
+  entryPoints      EntryPoints[]
+  userPredictions  UserPrediction[]
+  predictionResults PredictionResult[]
+  auditLogs        AuditLog[]
+}
+
+model Competition {
+  id               String    @id
+  name             String
+  slug             String    @unique
+  sportType        String    @default("soccer")
+  status           String    @default("active")
+  registrationOpen Boolean   @default(true)
+  lockMode         String    @default("competition")
+  lockDeadline     DateTime?
+  settings         Json      @default("{}")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  teams             Team[]
+  players           Player[]
+  fixtures          Fixture[]
+  entries           FantasyEntry[]
+  rawStats          RawStat[]
+  playerPoints      PlayerPoints[]
+  entryPoints       EntryPoints[]
+  scoringRuns       ScoringRun[]
+  predictionSets    PredictionSet[]
+  userPredictions   UserPrediction[]
+  predictionResults PredictionResult[]
+  announcements     Announcement[]
+  auditLogs         AuditLog[]
+}
+
+model Team {
+  id            String  @id
+  competitionId String
+  name          String
+  shortName     String
+  countryCode   String?
+  logoUrl       String?
+  metadata      Json?
+
+  competition Competition @relation(fields: [competitionId], references: [id])
+  players     Player[]
+  fixtures1   Fixture[]   @relation("Team1")
+  fixtures2   Fixture[]   @relation("Team2")
+
+  @@unique([competitionId, shortName])
+}
+
+model Player {
+  id            String  @id
+  competitionId String
+  teamId        String
+  name          String
+  teamName      String?
+  teamShortName String?
+  position      String
+  price         Float
+  status        String  @default("available")
+  providerIds   Json?
+  metadata      Json?
+
+  competition  Competition    @relation(fields: [competitionId], references: [id])
+  team         Team           @relation(fields: [teamId], references: [id])
+  rawStats     RawStat[]
+  playerPoints PlayerPoints[]
+}
+
+model Fixture {
+  id            String    @id
+  competitionId String
+  team1Id       String
+  team2Id       String
+  team1Name     String?
+  team2Name     String?
+  status        String    @default("upcoming")
+  startTime     DateTime
+  venue         String?
+  score         Json?
+  result        Json?
+  providerIds   Json?
+  metadata      Json?
+
+  competition    Competition     @relation(fields: [competitionId], references: [id])
+  team1          Team            @relation("Team1", fields: [team1Id], references: [id])
+  team2          Team            @relation("Team2", fields: [team2Id], references: [id])
+  rawStats       RawStat[]
+  playerPoints   PlayerPoints[]
+  entryPoints    EntryPoints[]
+  scoringRuns    ScoringRun[]
+  predictionSets PredictionSet[]
+}
+
+model FantasyEntry {
+  id            String    @id
+  competitionId String
+  userId        String
+  name          String
+  mascotUrl     String?
+  playerIds     String[]
+  captainId     String?
+  viceCaptainId String?
+  budgetUsed    Float
+  locked        Boolean   @default(false)
+  lockedAt      DateTime?
+  transferUsage Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  competition Competition @relation(fields: [competitionId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@unique([competitionId, userId])
+}
+
+model RawStat {
+  id            String   @id
+  competitionId String
+  fixtureId     String
+  playerId      String
+  source        String
+  stats         Json
+  importedAt    DateTime @default(now())
+
+  competition Competition @relation(fields: [competitionId], references: [id])
+  fixture     Fixture     @relation(fields: [fixtureId], references: [id])
+  player      Player      @relation(fields: [playerId], references: [id])
+
+  @@unique([competitionId, fixtureId, playerId, source])
+}
+
+model ScoringRun {
+  id            String   @id
+  competitionId String
+  fixtureId     String?
+  status        String
+  createdBy     String
+  createdAt     DateTime @default(now())
+  summary       Json
+
+  competition  Competition    @relation(fields: [competitionId], references: [id])
+  fixture      Fixture?       @relation(fields: [fixtureId], references: [id])
+  playerPoints PlayerPoints[]
+  entryPoints  EntryPoints[]
+}
+
+model PlayerPoints {
+  id            String @id
+  competitionId String
+  fixtureId     String
+  playerId      String
+  points        Float
+  breakdown     Json
+  scoringRunId  String
+
+  competition Competition @relation(fields: [competitionId], references: [id])
+  fixture     Fixture     @relation(fields: [fixtureId], references: [id])
+  player      Player      @relation(fields: [playerId], references: [id])
+  scoringRun  ScoringRun  @relation(fields: [scoringRunId], references: [id])
+}
+
+model EntryPoints {
+  id            String @id
+  competitionId String
+  fixtureId     String
+  entryId       String
+  userId        String
+  points        Float
+  breakdown     Json
+  scoringRunId  String
+
+  competition Competition @relation(fields: [competitionId], references: [id])
+  fixture     Fixture     @relation(fields: [fixtureId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+  scoringRun  ScoringRun  @relation(fields: [scoringRunId], references: [id])
+}
+
+model PredictionSet {
+  id            String   @id
+  competitionId String
+  fixtureId     String
+  type          String   @default("match_winner")
+  status        String   @default("open")
+  closesAt      DateTime
+  questions     Json
+
+  competition       Competition        @relation(fields: [competitionId], references: [id])
+  fixture           Fixture            @relation(fields: [fixtureId], references: [id])
+  userPredictions   UserPrediction[]
+  predictionResults PredictionResult[]
+}
+
+model UserPrediction {
+  id              String   @id
+  competitionId   String
+  predictionSetId String
+  questionId      String
+  userId          String
+  value           String
+  submittedAt     DateTime @default(now())
+
+  competition   Competition   @relation(fields: [competitionId], references: [id])
+  predictionSet PredictionSet @relation(fields: [predictionSetId], references: [id])
+  user          User          @relation(fields: [userId], references: [id])
+
+  @@unique([competitionId, predictionSetId, questionId, userId])
+}
+
+model PredictionResult {
+  id              String @id
+  competitionId   String
+  predictionSetId String
+  questionId      String
+  userId          String
+  pointsAwarded   Float
+
+  competition   Competition   @relation(fields: [competitionId], references: [id])
+  predictionSet PredictionSet @relation(fields: [predictionSetId], references: [id])
+  user          User          @relation(fields: [userId], references: [id])
+}
+
+model Announcement {
+  id            String    @id
+  competitionId String?
+  title         String?
+  message       String
+  icon          String?
+  priority      String    @default("normal")
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  competition Competition? @relation(fields: [competitionId], references: [id])
+}
+
+model AuditLog {
+  id            String   @id
+  actorUserId   String
+  action        String
+  entityType    String
+  entityId      String?
+  competitionId String?
+  before        Json?
+  after         Json?
+  createdAt     DateTime @default(now())
+
+  actor       User         @relation(fields: [actorUserId], references: [id])
+  competition Competition? @relation(fields: [competitionId], references: [id])
+}
