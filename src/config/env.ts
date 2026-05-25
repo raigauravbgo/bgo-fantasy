@@ -13,7 +13,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
   SESSION_COOKIE_NAME: z.string().min(1).default(DEFAULT_SESSION_COOKIE_NAME),
-  FOOTBALL_DATA_API_KEY: z.string().optional()
+  FOOTBALL_DATA_API_KEY: z.string().optional(),
+  APIFOOTBALL_API_KEY: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

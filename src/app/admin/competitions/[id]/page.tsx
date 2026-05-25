@@ -230,6 +230,20 @@ export default function CompetitionAdminPage() {
     });
   }
 
+  async function fetchLiveStats() {
+    const fixtureId = selectedFixtureId || fixtures[0]?.id;
+    if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
+    await run("Live stats fetched from API-Football", async () => {
+      const result = await apiFetch<{ afFixtureId: number; mapped: number; unmapped: number; unmappedNames: string[]; score: { home: number; away: number } }>(
+        `/api/admin/fixtures/${fixtureId}/stats/fetch-live`,
+        { method: "POST" }
+      );
+      const msg = `Mapped ${result.mapped} players. Score: ${result.score.home}–${result.score.away}.` +
+        (result.unmapped > 0 ? ` ${result.unmapped} unmapped: ${result.unmappedNames.slice(0, 5).join(", ")}` : "");
+      showNotice(msg);
+    });
+  }
+
   async function openPrediction() {
     const fixtureId = selectedFixtureId || fixtures[0]?.id;
     if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
@@ -628,9 +642,28 @@ export default function CompetitionAdminPage() {
               </div>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 <button className="btn-outline" onClick={openPrediction} disabled={!!running}>Open match-winner prediction</button>
-                <button className="btn" onClick={publishScoring} disabled={!!running}>{running ? "Running…" : "Import & publish sample scoring"}</button>
+                <button className="btn" onClick={fetchLiveStats} disabled={!!running}>{running ? "Running…" : "⚡ Fetch real stats (API-Football)"}</button>
+                <button className="btn-outline" onClick={publishScoring} disabled={!!running}>{running ? "Running…" : "Import & publish dummy scoring"}</button>
               </div>
-              <p className="form-hint">Uses dummy stats for the most-owned players. For real stats, use CSV import below.</p>
+              <p className="form-hint">
+                <strong>Fetch real stats</strong> pulls live player data from API-Football (goals, assists, cards, saves, minutes) and imports automatically.
+                After fetching, click Publish below to calculate and publish points.
+                <br />Dummy scoring generates fake stats for testing only.
+              </p>
+              <div style={{ marginTop: "10px" }}>
+                <button className="btn btn-sm" onClick={async () => {
+                  const fixtureId = selectedFixtureId || fixtures[0]?.id;
+                  if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
+                  await run("Scoring published", () =>
+                    apiFetch(`/api/admin/fixtures/${fixtureId}/stats/publish`, {
+                      method: "POST",
+                      body: { score: { team1: team1Score, team2: team2Score } }
+                    })
+                  );
+                }} disabled={!!running}>
+                  Publish points from imported stats
+                </button>
+              </div>
             </div>
           </div>
 
