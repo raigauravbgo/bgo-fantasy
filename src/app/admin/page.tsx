@@ -74,7 +74,7 @@ export default function AdminPage() {
         method: "POST",
         body: {
           name: form.get("name"),
-          slug: form.get("slug"),
+          slug: (form.get("slug") as string).toLowerCase().replace(/[^a-z0-9-]/g, "-"),
           registrationOpen: true,
           budget: Number(form.get("budget") || 100),
           squadSize: Number(form.get("squadSize") || 15),
@@ -116,10 +116,11 @@ export default function AdminPage() {
                 <input
                   className="form-input" name="slug"
                   placeholder="e.g. bgo-pl-2025"
-                  pattern="[a-z0-9-]+"
                   title="Lowercase letters, numbers and hyphens only"
+                  onChange={(e) => { e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"); }}
                   required
                 />
+                <span className="form-hint">Lowercase letters, numbers and hyphens only</span>
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px" }}>
