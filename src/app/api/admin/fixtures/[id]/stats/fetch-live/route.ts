@@ -186,7 +186,7 @@ export async function POST(
     await repo.rawStats.upsertMany(statItems);
 
     // Auto-publish points using the score we already have
-    const [rawStats, players, entries] = await Promise.all([
+    const [rawStats, allPlayers, entries] = await Promise.all([
       repo.rawStats.listByFixture(fixtureId),
       repo.players.list(fixture.competitionId),
       repo.entries.list(fixture.competitionId)
@@ -196,7 +196,7 @@ export async function POST(
       competitionId: fixture.competitionId,
       fixtureId,
       rawStats,
-      players,
+      players: allPlayers,
       entries,
       actorUserId: admin.id,
       status: "published"
