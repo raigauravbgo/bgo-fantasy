@@ -4,7 +4,6 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useRequireAdmin } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import type { Fixture } from "@/lib/types";
 
 type AdminPlayer = {
   id: string;
@@ -20,15 +19,25 @@ type PlayerPoints = { playerId: string; points: number };
 type AdminEntry = { id: string; userId: string; name: string; budgetUsed: number; locked: boolean; playerIds: string[] };
 type AdminUser = { id: string; name: string; email: string; role: string };
 
+type AdminFixture = {
+  id: string;
+  team1Name?: string;
+  team2Name?: string;
+  status: string;
+  startTime: string;
+  score?: { team1?: number; team2?: number };
+};
+
 type OverviewData = {
   competition: { id: string; name: string; slug: string; registrationOpen: boolean; settings?: { budget?: number; squadSize?: number; maxPlayersPerTeam?: number } };
   teams: unknown[];
   players: AdminPlayer[];
-  fixtures: { id: string; team1Name?: string; team2Name?: string; status: string }[];
+  fixtures: AdminFixture[];
   entries: AdminEntry[];
   announcements: unknown[];
   auditLogs: { action: string; createdAt: string }[];
   playerPoints: PlayerPoints[];
+  entryPoints: { fixtureId: string; entryId: string; points: number }[];
   users: AdminUser[];
 };
 
@@ -78,6 +87,16 @@ const LEAGUE_OPTIONS = [
   { value: "BSA", label: "🇧🇷 Brasileirão (Brazil)" },
 ];
 
+function fixtureLabel(f: AdminFixture): string {
+  const date = new Date(f.startTime);
+  const dateStr = date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const status = f.status === "completed" ? " ✓" : f.status === "live" ? " 🔴" : "";
+  const score = f.status === "completed" && f.score != null
+    ? ` (${f.score.team1 ?? "?"}–${f.score.team2 ?? "?"})`
+    : "";
+  return `${f.team1Name ?? "?"} vs ${f.team2Name ?? "?"} · ${dateStr}${score}${status}`;
+}
+
 export default function CompetitionAdminPage() {
   useRequireAdmin();
   const params = useParams();
@@ -89,7 +108,7 @@ export default function CompetitionAdminPage() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
-  const [fixtures, setFixtures] = useState<Fixture[]>([]);
+  const [fixtures, setFixtures] = useState<AdminFixture[]>([]);
   const [selectedFixtureId, setSelectedFixtureId] = useState("");
   const [team1Score, setTeam1Score] = useState(0);
   const [team2Score, setTeam2Score] = useState(0);
@@ -117,7 +136,7 @@ export default function CompetitionAdminPage() {
       }
       d.players = d.players.map((p) => ({ ...p, totalPoints: ptsByPlayer[p.id] ?? 0 }));
       setData(d);
-      setFixtures(d.fixtures as Fixture[]);
+      setFixtures(d.fixtures);
       if (!selectedFixtureId && d.fixtures[0]) setSelectedFixtureId(d.fixtures[0].id);
     } catch (err) {
       setNotice({ type: "err", msg: err instanceof Error ? err.message : "Failed to load." });
@@ -363,6 +382,67 @@ export default function CompetitionAdminPage() {
                 <button className="btn-outline btn-sm" onClick={exportSquadsCsv}>Export squads CSV</button>
               </div>
             )}
+            <div className="section-title">Fixture Scoring Status</div>
+            {data.fixtures.length === 0 ? (
+              <p className="card-muted" style={{ marginBottom: "24px" }}>No fixtures imported yet.</p>
+            ) : (() => {
+              const scoredFixtureIds = new Set(data.entryPoints?.map((ep) => ep.fixtureId) ?? []);
+              const completed = data.fixtures.filter((f) => f.status === "completed");
+              const upcoming = data.fixtures.filter((f) => f.status !== "completed");
+              return (
+                <div style={{ marginBottom: "28px" }}>
+                  <div style={{ display: "flex", gap: "12px", marginBottom: "10px", fontSize: "0.8rem" }}>
+                    <span style={{ color: "hsl(var(--ok))" }}>● Scored</span>
+                    <span style={{ color: "hsl(var(--warn))" }}>● Completed, not scored</span>
+                    <span style={{ color: "hsl(var(--ink-muted))" }}>● Upcoming</span>
+                  </div>
+                  <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                    <table className="lb-table">
+                      <thead>
+                        <tr>
+                          <th>Fixture</th>
+                          <th>Date</th>
+                          <th>Score</th>
+                          <th style={{ textAlign: "right" }}>Scoring</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...completed, ...upcoming].slice(0, 20).map((f) => {
+                          const isScored = scoredFixtureIds.has(f.id);
+                          const isCompleted = f.status === "completed";
+                          return (
+                            <tr key={f.id}>
+                              <td style={{ fontWeight: 600 }}>{f.team1Name ?? "?"} vs {f.team2Name ?? "?"}</td>
+                              <td style={{ fontSize: "0.82rem", color: "hsl(var(--ink-muted))" }}>
+                                {new Date(f.startTime).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                              </td>
+                              <td style={{ fontSize: "0.85rem" }}>
+                                {isCompleted && f.score != null
+                                  ? `${f.score.team1 ?? "?"}–${f.score.team2 ?? "?"}`
+                                  : isCompleted ? "—" : <span style={{ color: "hsl(var(--ink-muted))" }}>upcoming</span>}
+                              </td>
+                              <td style={{ textAlign: "right" }}>
+                                {isScored
+                                  ? <span className="badge badge-available">Scored</span>
+                                  : isCompleted
+                                    ? <span className="badge badge-doubtful">Not scored</span>
+                                    : <span className="badge badge-upcoming">Upcoming</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {data.fixtures.length > 20 && (
+                    <p style={{ fontSize: "0.78rem", color: "hsl(var(--ink-muted))", marginTop: "6px" }}>
+                      Showing 20 of {data.fixtures.length} fixtures (completed first)
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="section-title">Recent Audit Log</div>
             {data.auditLogs.length === 0 ? (
               <p className="card-muted">No audit events yet.</p>
@@ -533,7 +613,7 @@ export default function CompetitionAdminPage() {
                 <label className="form-label">Fixture</label>
                 <select className="form-input" value={selectedFixtureId} onChange={(e) => setSelectedFixtureId(e.target.value)}>
                   {fixtures.length === 0 ? <option value="">No fixtures — import first</option> :
-                    fixtures.map((f) => <option key={f.id} value={f.id}>{f.team1Name ?? "?"} vs {f.team2Name ?? "?"}{f.status === "completed" ? " ✓" : ""}</option>)}
+                    fixtures.map((f) => <option key={f.id} value={f.id}>{fixtureLabel(f)}</option>)}
                 </select>
               </div>
               <div className="grid-2">
@@ -564,7 +644,7 @@ export default function CompetitionAdminPage() {
                 <label className="form-label">Fixture</label>
                 <select className="form-input" value={csvFixtureId || selectedFixtureId} onChange={(e) => setCsvFixtureId(e.target.value)}>
                   {fixtures.length === 0 ? <option value="">No fixtures</option> :
-                    fixtures.map((f) => <option key={f.id} value={f.id}>{f.team1Name ?? "?"} vs {f.team2Name ?? "?"}{f.status === "completed" ? " ✓" : ""}</option>)}
+                    fixtures.map((f) => <option key={f.id} value={f.id}>{fixtureLabel(f)}</option>)}
                 </select>
               </div>
               <div className="form-group">
