@@ -4,6 +4,7 @@ import { Plus_Jakarta_Sans, DM_Mono } from "next/font/google";
 
 import { AuthProvider } from "@/lib/auth-context";
 import { Nav } from "@/components/nav";
+import { ReportIssue } from "@/components/report-issue";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <AuthProvider>
           <Nav />
           {children}
+          <ReportIssue />
         </AuthProvider>
       </body>
     </html>

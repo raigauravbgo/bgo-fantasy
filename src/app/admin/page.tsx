@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRequireAdmin } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
@@ -150,6 +151,7 @@ export default function AdminPage() {
           <p className="page-subtitle">Manage competitions, import data, publish scoring</p>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0, marginTop: "6px" }}>
+          <Link href="/admin/bug-reports" className="btn-outline btn-sm">🐞 Bug reports</Link>
           <button
             className="btn-outline btn-sm"
             onClick={() => { setShowEmployeeImport(!showEmployeeImport); setImportResult(null); }}
