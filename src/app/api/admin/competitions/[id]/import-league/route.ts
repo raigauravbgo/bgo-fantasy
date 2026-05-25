@@ -7,15 +7,15 @@ import { platformRepository } from "@/server/repositories/platform";
 const FD_BASE = "https://api.football-data.org/v4";
 
 export const SUPPORTED_LEAGUES: Record<string, { name: string; countryCode: string; season: number }> = {
-  PL:  { name: "Premier League",      countryCode: "GB", season: 2024 },
-  BL1: { name: "Bundesliga",          countryCode: "DE", season: 2024 },
-  PD:  { name: "La Liga",             countryCode: "ES", season: 2024 },
-  SA:  { name: "Serie A",             countryCode: "IT", season: 2024 },
-  FL1: { name: "Ligue 1",             countryCode: "FR", season: 2024 },
-  DED: { name: "Eredivisie",          countryCode: "NL", season: 2024 },
-  PPL: { name: "Primeira Liga",       countryCode: "PT", season: 2024 },
-  ELC: { name: "Championship",        countryCode: "GB", season: 2024 },
-  BSA: { name: "Brasileirão",         countryCode: "BR", season: 2025 },
+  PL:  { name: "Premier League",      countryCode: "GB", season: 2025 },
+  BL1: { name: "Bundesliga",          countryCode: "DE", season: 2025 },
+  PD:  { name: "La Liga",             countryCode: "ES", season: 2025 },
+  SA:  { name: "Serie A",             countryCode: "IT", season: 2025 },
+  FL1: { name: "Ligue 1",             countryCode: "FR", season: 2025 },
+  DED: { name: "Eredivisie",          countryCode: "NL", season: 2025 },
+  PPL: { name: "Primeira Liga",       countryCode: "PT", season: 2025 },
+  ELC: { name: "Championship",        countryCode: "GB", season: 2025 },
+  BSA: { name: "Brasileirão",         countryCode: "BR", season: 2026 },
 };
 
 const schema = z.object({
@@ -67,6 +67,16 @@ const STAR_PRICES: Record<string, number> = {
   // Ligue 1 stars
   "Bradley Barcola": 9.5, "Ousmane Dembélé": 10.5, "Mason Greenwood": 9.0,
   "Elye Wahi": 8.5, "Jonathan David": 11.0,
+  // Brasileirão stars (2026)
+  "Vitor Roque": 12.0, "Lucas Paquetá": 11.5, "Pedro": 11.0,
+  "Kaio Jorge": 10.0, "Yuri Alberto": 10.0,
+  "Danilo": 9.5, "Breno Bidon": 9.0, "Gerson": 9.0,
+  "Giorgian de Arrascaeta": 9.5, "Matheus Pereira": 9.0,
+  "Samuel Lino": 8.5, "Andreas Pereira": 8.5, "Jhon Arias": 8.5,
+  "Allan": 8.0, "Mauricio": 8.5, "André": 8.5,
+  "Martinelli": 8.0, "Hércules": 7.5,
+  "Léo Ortiz": 7.5, "Fabrício Bruno": 7.0,
+  "Jean Lucas": 7.5, "Marcos Antônio": 7.5,
 };
 
 const STAR_PRICE_TOKENS = Object.entries(STAR_PRICES).map(
@@ -142,16 +152,29 @@ export async function POST(
 
     const savedPlayers = await repo.players.upsertMany(playerItems);
 
-    // 3. Fetch upcoming fixtures only — no fallback to finished/historical matches
-    const scheduled = await fdFetch<{ matches: FdMatch[] }>(
-      `/competitions/${leagueCode}/matches?status=SCHEDULED&season=${league.season}`,
-      apiKey
-    );
-    const rawMatches = scheduled.matches;
+    // 3. Fetch upcoming fixtures (SCHEDULED + TIMED) — no fallback to historical
+    const [scheduledRes, timedRes] = await Promise.all([
+      fdFetch<{ matches: FdMatch[] }>(
+        `/competitions/${leagueCode}/matches?status=SCHEDULED&season=${league.season}`,
+        apiKey
+      ),
+      fdFetch<{ matches: FdMatch[] }>(
+        `/competitions/${leagueCode}/matches?status=TIMED&season=${league.season}`,
+        apiKey
+      )
+    ]);
+
+    // Deduplicate by utcDate + home team
+    const seen = new Set<string>();
+    const rawMatches: FdMatch[] = [];
+    for (const m of [...scheduledRes.matches, ...timedRes.matches]) {
+      const key = `${m.utcDate}|${m.homeTeam.tla}`;
+      if (!seen.has(key)) { seen.add(key); rawMatches.push(m); }
+    }
 
     if (rawMatches.length === 0) {
       throw new RequestError(
-        `No upcoming fixtures found for ${league.name} (season ${league.season}). The season may not have started yet or all fixtures are already completed. Check back when the new season schedule is published.`,
+        `No upcoming fixtures found for ${league.name} (season ${league.season}). The season may not have started yet or may be on a break. Check back later.`,
         404
       );
     }
@@ -165,7 +188,7 @@ export async function POST(
         team2Id: team2?.id ?? savedTeams[1].id,
         team1Name: m.homeTeam.name,
         team2Name: m.awayTeam.name,
-        status: m.status === "FINISHED" ? ("completed" as const) : ("upcoming" as const),
+        status: m.status === "FINISHED" ? ("completed" as const) : m.status === "IN_PLAY" ? ("live" as const) : ("upcoming" as const),
         startTime: new Date(m.utcDate),
         venue: m.venue ?? undefined
       };
