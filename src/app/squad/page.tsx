@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Plus, Minus, Star, MagnifyingGlass } from "@phosphor-icons/react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import type { FantasyEntry, Player } from "@/lib/types";
@@ -195,68 +197,119 @@ export default function SquadPage() {
     const isVC = vcId === player.id;
     const full = !isSelected && selectedIds.length >= squadSize;
     const unavailable = player.status === "unavailable" || (full && !isSelected);
+    const clickable = !isLocked && !(unavailable && !isSelected);
+
+    const posColor: Record<string, string> = {
+      GK: "hsl(var(--pos-gk))", DEF: "hsl(var(--pos-def))",
+      MID: "hsl(var(--pos-mid))", FWD: "hsl(var(--pos-fwd))",
+    };
+    const posBg: Record<string, string> = {
+      GK: "hsl(var(--pos-gk-bg))", DEF: "hsl(var(--pos-def-bg))",
+      MID: "hsl(var(--pos-mid-bg))", FWD: "hsl(var(--pos-fwd-bg))",
+    };
 
     return (
-      <div
+      <motion.div
+        layout
+        initial={{ opacity: 0 }}
+        animate={{ opacity: unavailable && !isSelected ? 0.4 : 1 }}
+        transition={{ duration: 0.12 }}
         style={{
           display: "grid",
           gridTemplateColumns: "36px 1fr auto auto 36px",
           alignItems: "center",
-          gap: "8px",
-          padding: "7px 10px",
+          gap: 8,
+          padding: "8px 12px",
           borderBottom: "1px solid hsl(var(--line))",
-          opacity: unavailable && !isSelected ? 0.45 : 1,
-          background: isSelected ? "hsl(var(--brand-muted))" : undefined,
-          cursor: isLocked || (unavailable && !isSelected) ? "default" : "pointer",
-          transition: "background 100ms"
+          background: isSelected
+            ? "hsl(var(--brand-muted))"
+            : "transparent",
+          cursor: clickable ? "pointer" : "default",
+          transition: "background 120ms ease",
         }}
-        onClick={() => !isLocked && !unavailable ? togglePlayer(player) : undefined}
+        whileHover={clickable ? { backgroundColor: isSelected ? undefined : "hsl(var(--surface-overlay))" } : {}}
+        onClick={() => clickable && togglePlayer(player)}
       >
         {/* Jersey */}
-        <JerseyIcon tla={player.teamShortName ?? ""} size={28} />
+        <JerseyIcon tla={player.teamShortName ?? ""} size={30} />
 
-        {/* Name + club */}
-        <div>
-          <div style={{ fontWeight: 700, fontSize: "0.85rem", lineHeight: 1.2 }}>
-            {player.name}
-            {isCap && <span style={{ marginLeft: "5px", fontSize: "0.65rem", background: "hsl(var(--accent2))", color: "hsl(var(--accent2-fg))", borderRadius: "3px", padding: "1px 4px", fontWeight: 800 }}>C</span>}
-            {isVC && <span style={{ marginLeft: "5px", fontSize: "0.65rem", background: "hsl(var(--brand))", color: "hsl(var(--brand-fg))", borderRadius: "3px", padding: "1px 4px", fontWeight: 800 }}>V</span>}
+        {/* Name + meta */}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 700, fontSize: "0.84rem", lineHeight: 1.25 }}>
+              {player.name}
+            </span>
+            {isCap && (
+              <span style={{
+                fontSize: "0.58rem", fontWeight: 900, letterSpacing: "0.04em",
+                background: "hsl(var(--accent2))", color: "hsl(var(--accent2-fg))",
+                borderRadius: 3, padding: "1px 5px",
+              }}>C</span>
+            )}
+            {isVC && (
+              <span style={{
+                fontSize: "0.58rem", fontWeight: 900,
+                background: "hsl(var(--brand))", color: "hsl(var(--brand-fg))",
+                borderRadius: 3, padding: "1px 5px",
+              }}>V</span>
+            )}
           </div>
-          <div style={{ fontSize: "0.72rem", color: "hsl(var(--ink-muted))", marginTop: "1px" }}>
-            {player.teamShortName ?? "—"} · <span className={`badge badge-${player.position.toLowerCase()}`} style={{ fontSize: "0.62rem", padding: "0 3px" }}>{player.position}</span>
-            {player.status !== "available" && <span className={`badge badge-${player.status}`} style={{ marginLeft: "4px", fontSize: "0.62rem" }}>{player.status}</span>}
+          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
+            <span style={{ fontSize: "0.7rem", color: "hsl(var(--ink-muted))", fontWeight: 600 }}>
+              {player.teamShortName ?? "—"}
+            </span>
+            <span style={{
+              fontSize: "0.6rem", fontWeight: 800, letterSpacing: "0.04em",
+              background: posBg[player.position] ?? "hsl(var(--surface-overlay))",
+              color: posColor[player.position] ?? "hsl(var(--ink-muted))",
+              borderRadius: 3, padding: "0 4px",
+            }}>
+              {player.position}
+            </span>
+            {player.status !== "available" && (
+              <span className={`badge badge-${player.status}`} style={{ fontSize: "0.58rem", padding: "0 3px" }}>
+                {player.status}
+              </span>
+            )}
           </div>
         </div>
 
         {/* Price */}
-        <div style={{ fontWeight: 700, fontSize: "0.82rem", textAlign: "right", color: "hsl(var(--ink))" }}>
+        <div style={{
+          fontWeight: 700, fontSize: "0.8rem", textAlign: "right",
+          color: "hsl(var(--ink))", fontVariantNumeric: "tabular-nums", minWidth: 36,
+        }}>
           £{player.price}m
         </div>
 
         {/* Points */}
-        <div style={{ fontWeight: 600, fontSize: "0.82rem", textAlign: "right", color: "hsl(var(--brand))", minWidth: "36px" }}>
-          {player.totalPoints != null ? `${player.totalPoints}` : "—"}
+        <div style={{
+          fontWeight: 700, fontSize: "0.85rem", textAlign: "right",
+          color: "hsl(var(--brand))", fontVariantNumeric: "tabular-nums", minWidth: 32,
+        }}>
+          {player.totalPoints != null ? player.totalPoints : "—"}
         </div>
 
         {/* Add/remove button */}
-        <button
+        <motion.button
+          whileTap={{ scale: 0.88 }}
           style={{
-            width: "28px", height: "28px", borderRadius: "50%",
+            width: 30, height: 30, borderRadius: "50%",
             border: `2px solid ${isSelected ? "hsl(var(--danger))" : "hsl(var(--brand))"}`,
-            background: "transparent",
+            background: isSelected ? "hsl(var(--danger) / 0.12)" : "hsl(var(--brand) / 0.1)",
             color: isSelected ? "hsl(var(--danger))" : "hsl(var(--brand))",
-            fontWeight: 900, fontSize: "1.1rem", lineHeight: 1,
             cursor: isLocked || (unavailable && !isSelected) ? "not-allowed" : "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-            transition: "all 100ms"
+            flexShrink: 0, transition: "all 120ms ease",
           }}
           disabled={!!isLocked || (unavailable && !isSelected)}
           onClick={(e) => { e.stopPropagation(); togglePlayer(player); }}
         >
-          {isSelected ? "−" : "+"}
-        </button>
-      </div>
+          {isSelected
+            ? <Minus size={14} weight="bold" />
+            : <Plus size={14} weight="bold" />}
+        </motion.button>
+      </motion.div>
     );
   }
 
@@ -386,7 +439,7 @@ export default function SquadPage() {
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Search */}
       <div style={{ position: "relative", marginBottom: "10px" }}>
-        <span style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--ink-muted))", pointerEvents: "none", fontSize: "0.9rem" }}>🔍</span>
+        <MagnifyingGlass size={14} weight="bold" style={{ position: "absolute", left: "11px", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--ink-muted))", pointerEvents: "none" }} />
         <input
           className="filter-search"
           style={{ paddingLeft: "32px", width: "100%" }}

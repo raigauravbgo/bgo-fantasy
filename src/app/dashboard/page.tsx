@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
+import { TrendUp, Medal, UsersThree, Lock, SoccerBall } from "@phosphor-icons/react";
 
 import { useRequireAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
@@ -105,29 +107,77 @@ export default function DashboardPage() {
 
       {/* Stat tiles */}
       <div className="stat-tiles">
-        <div className="stat-tile">
+        {/* Points */}
+        <motion.div
+          className="stat-tile"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05, duration: 0.2 }}
+          style={{ borderTop: "3px solid hsl(var(--brand))", position: "relative", overflow: "hidden" }}
+        >
+          <div style={{ position: "absolute", top: 14, right: 14, color: "hsl(var(--brand) / 0.25)" }}>
+            <TrendUp size={32} weight="bold" />
+          </div>
           <div className="stat-label">Total Points</div>
-          <div className="stat-value">{data?.totalPoints ?? 0}</div>
+          <div className="stat-value" style={{ color: "hsl(var(--ink))" }}>
+            {data?.totalPoints ?? 0}
+          </div>
           <div className="stat-sub">competition total</div>
-        </div>
-        <div className="stat-tile">
+        </motion.div>
+
+        {/* Rank */}
+        <motion.div
+          className="stat-tile"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.2 }}
+          style={{ borderTop: "3px solid hsl(var(--accent2))", position: "relative", overflow: "hidden" }}
+        >
+          <div style={{ position: "absolute", top: 14, right: 14, color: "hsl(var(--accent2) / 0.25)" }}>
+            <Medal size={32} weight="bold" />
+          </div>
           <div className="stat-label">Rank</div>
-          <div className="stat-value">
+          <div className="stat-value" style={{ color: data?.rank != null && data.rank <= 3 ? "hsl(var(--accent2))" : "hsl(var(--ink))" }}>
             {data?.rank != null ? `#${data.rank}` : "—"}
           </div>
           <div className="stat-sub">overall leaderboard</div>
-        </div>
-        <div className="stat-tile">
+        </motion.div>
+
+        {/* Squad */}
+        <motion.div
+          className="stat-tile"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.2 }}
+          style={{ borderTop: "3px solid hsl(var(--pos-def))", position: "relative", overflow: "hidden" }}
+        >
+          <div style={{ position: "absolute", top: 14, right: 14, color: "hsl(var(--pos-def) / 0.25)" }}>
+            <UsersThree size={32} weight="bold" />
+          </div>
           <div className="stat-label">Squad</div>
           <div className="stat-value">
             {data?.entry ? data.entry.playerIds.length : 0}
-            <span style={{ fontSize: "1rem", fontWeight: 500 }}>/11</span>
+            <span style={{ fontSize: "1rem", fontWeight: 500, color: "hsl(var(--ink-muted))" }}>/11</span>
           </div>
           <div className="stat-sub">players selected</div>
-        </div>
-        <div className="stat-tile">
+        </motion.div>
+
+        {/* Status */}
+        <motion.div
+          className="stat-tile"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.2 }}
+          style={{
+            borderTop: `3px solid ${data?.entry?.locked ? "hsl(var(--ok))" : "hsl(var(--warn))"}`,
+            position: "relative", overflow: "hidden",
+          }}
+        >
+          <div style={{ position: "absolute", top: 14, right: 14, color: data?.entry?.locked ? "hsl(var(--ok) / 0.25)" : "hsl(var(--warn) / 0.2)" }}>
+            <Lock size={32} weight="bold" />
+          </div>
           <div className="stat-label">Status</div>
-          <div className="stat-value" style={{ fontSize: "1.1rem" }}>
+          <div className="stat-value" style={{ fontSize: "1.1rem", marginTop: 4 }}>
             {data?.entry?.locked ? (
               <span className="badge badge-locked">Locked</span>
             ) : (
@@ -135,11 +185,9 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="stat-sub">
-            {data?.entry?.locked
-              ? "squad is locked"
-              : "squad not yet locked"}
+            {data?.entry?.locked ? "squad is locked" : "squad not yet locked"}
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Announcements */}
@@ -158,29 +206,52 @@ export default function DashboardPage() {
           {/* Call-to-action if no squad */}
           {!data?.entry ? (
             competition.registrationOpen ? (
-              <div
-                className="card"
-                style={{ marginBottom: "20px", textAlign: "center", padding: "32px" }}
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+                style={{
+                  marginBottom: 20,
+                  background: "hsl(var(--surface-raised))",
+                  border: "1px solid hsl(var(--brand) / 0.3)",
+                  borderRadius: 16,
+                  padding: "36px 32px",
+                  textAlign: "center",
+                  position: "relative",
+                  overflow: "hidden",
+                  boxShadow: "0 0 40px hsl(var(--brand) / 0.08), 0 1px 0 0 hsl(var(--surface-overlay)) inset",
+                }}
               >
-                <div style={{ fontSize: "1.5rem", marginBottom: "10px" }}>⚽</div>
-                <div style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "8px" }}>
-                  Join the competition
+                {/* Background glow */}
+                <div style={{
+                  position: "absolute", inset: 0, pointerEvents: "none",
+                  background: "radial-gradient(ellipse 70% 60% at 50% 0%, hsl(var(--brand-muted) / 0.35), transparent)",
+                }} />
+                <div style={{ position: "relative" }}>
+                  <SoccerBall
+                    size={44}
+                    weight="duotone"
+                    style={{ color: "hsl(var(--brand))", marginBottom: 12 }}
+                  />
+                  <div style={{ fontSize: "1.2rem", fontWeight: 800, marginBottom: 8, letterSpacing: "-0.01em" }}>
+                    Join the competition
+                  </div>
+                  <p style={{ color: "hsl(var(--ink-muted))", fontSize: "0.875rem", marginBottom: 24, lineHeight: 1.6 }}>
+                    Pick {competition.settings?.squadSize ?? 11} players within the £{competition.settings?.budget ?? 100}m budget,
+                    choose your captain, and lock your squad before the deadline.
+                  </p>
+                  <Link className="btn" href="/squad" style={{ fontSize: "0.9rem", minHeight: 42, padding: "0 28px" }}>
+                    Build my squad
+                  </Link>
                 </div>
-                <p className="card-muted" style={{ marginBottom: "20px" }}>
-                  Pick 11 players within the £{competition.settings?.budget ?? 100} budget,
-                  choose your captain, and lock your squad before the deadline.
-                </p>
-                <Link className="btn" href="/squad">
-                  Build my squad
-                </Link>
-              </div>
+              </motion.div>
             ) : (
               <div
                 className="card"
-                style={{ marginBottom: "20px", textAlign: "center", padding: "32px", borderColor: "var(--border)" }}
+                style={{ marginBottom: 20, textAlign: "center", padding: 32, borderColor: "hsl(var(--line-strong))" }}
               >
-                <div style={{ fontSize: "1.5rem", marginBottom: "10px" }}>🔒</div>
-                <div style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "8px" }}>
+                <Lock size={36} weight="thin" style={{ color: "hsl(var(--ink-muted))", marginBottom: 12 }} />
+                <div style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: 8 }}>
                   Registration is closed
                 </div>
                 <p className="card-muted">

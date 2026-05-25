@@ -41,6 +41,10 @@
   --color-input:          hsl(var(--surface-sunken));
   --color-ring:           hsl(var(--brand));
 
+  /* Fonts — var(--font-sans) is injected by Next.js font loader */
+  --font-family-sans: var(--font-sans, 'Plus Jakarta Sans'), system-ui, sans-serif;
+  --font-family-mono: var(--font-mono, 'DM Mono'), ui-monospace, monospace;
+
   /* Font sizes */
   --text-2xs: 0.625rem;
 
@@ -157,7 +161,8 @@
   }
 
   body {
-    @apply bg-surface-base text-ink font-sans;
+    @apply bg-surface-base text-ink;
+    font-family: var(--font-sans, 'Plus Jakarta Sans'), system-ui, sans-serif;
     font-size: 15px;
     line-height: 1.55;
   }
@@ -244,8 +249,13 @@
     position: sticky;
     top: 0;
     z-index: 100;
-    /* Subtle top shimmer line for depth */
     box-shadow: 0 1px 0 0 hsl(var(--surface-overlay)), 0 4px 24px hsl(220 40% 3% / 0.5);
+    /* Subtle brand gradient stripe at the very top */
+    background-image: linear-gradient(
+      to bottom,
+      hsl(var(--brand) / 0.06) 0px,
+      transparent 3px
+    );
   }
 
   .nav-inner {
@@ -298,10 +308,10 @@
   }
 
   .nav-link.active {
-    color: hsl(var(--ink));
-    background: hsl(var(--surface-overlay));
+    color: hsl(var(--brand));
+    background: hsl(var(--brand-muted));
     @apply font-bold;
-    box-shadow: inset 0 -2px 0 hsl(var(--brand));
+    box-shadow: 0 0 0 1px hsl(var(--brand) / 0.3);
   }
 
   .nav-user {

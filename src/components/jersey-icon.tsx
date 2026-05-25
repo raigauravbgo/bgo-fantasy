@@ -1,5 +1,6 @@
 // Primary + secondary colours for all 20 PL clubs
 const TEAM_COLORS: Record<string, { primary: string; secondary: string; pattern?: "stripes" | "hoops" | "sash" | "plain" }> = {
+  // ── Premier League ──────────────────────────────────────────────────────────
   ARS: { primary: "#EF0107", secondary: "#ffffff", pattern: "plain" },
   AVL: { primary: "#670E36", secondary: "#95BFE5", pattern: "plain" },
   BOU: { primary: "#000000", secondary: "#DA291C", pattern: "stripes" },
@@ -20,6 +21,60 @@ const TEAM_COLORS: Record<string, { primary: string; secondary: string; pattern?
   TOT: { primary: "#132257", secondary: "#ffffff", pattern: "plain" },
   WHU: { primary: "#7A263A", secondary: "#1BB1E7", pattern: "plain" },
   WOL: { primary: "#FDB913", secondary: "#231F20", pattern: "plain" },
+
+  // ── Brasileirão Série A ─────────────────────────────────────────────────────
+  // Flamengo
+  FLA: { primary: "#CC0000", secondary: "#000000", pattern: "hoops" },
+  // Palmeiras
+  PAL: { primary: "#006437", secondary: "#ffffff", pattern: "plain" },
+  // Corinthians
+  COR: { primary: "#000000", secondary: "#ffffff", pattern: "plain" },
+  // São Paulo
+  SAO: { primary: "#CC0000", secondary: "#ffffff", pattern: "plain" },
+  // Santos
+  SAN: { primary: "#000000", secondary: "#ffffff", pattern: "stripes" },
+  // Grêmio
+  GRE: { primary: "#0B4D9F", secondary: "#000000", pattern: "stripes" },
+  // Internacional
+  INT: { primary: "#CC0000", secondary: "#ffffff", pattern: "plain" },
+  // Atlético Mineiro
+  CAM: { primary: "#000000", secondary: "#ffffff", pattern: "plain" },
+  // Fluminense
+  FLU: { primary: "#8B0000", secondary: "#006400", pattern: "stripes" },
+  // Vasco
+  VAS: { primary: "#000000", secondary: "#ffffff", pattern: "sash" },
+  // Botafogo
+  BOT: { primary: "#000000", secondary: "#ffffff", pattern: "stripes" },
+  // Cruzeiro
+  CRU: { primary: "#003087", secondary: "#ffffff", pattern: "plain" },
+  // Bahia
+  BAH: { primary: "#0052A1", secondary: "#CC0000", pattern: "stripes" },
+  // Fortaleza
+  FOR: { primary: "#CC0000", secondary: "#003087", pattern: "stripes" },
+  // Athletico Paranaense (CAP)
+  CAP: { primary: "#CC0000", secondary: "#000000", pattern: "plain" },
+  // Coritiba
+  COT: { primary: "#006437", secondary: "#ffffff", pattern: "stripes" },
+  // Mirassol
+  MIR: { primary: "#FFD700", secondary: "#000000", pattern: "plain" },
+  // Red Bull Bragantino
+  RBB: { primary: "#CC0000", secondary: "#ffffff", pattern: "plain" },
+  // Juventude
+  JUV: { primary: "#006437", secondary: "#ffffff", pattern: "plain" },
+  // Criciúma
+  CRI: { primary: "#FFD700", secondary: "#000000", pattern: "stripes" },
+  // Sport Recife
+  SPO: { primary: "#CC0000", secondary: "#000000", pattern: "stripes" },
+  // América Mineiro
+  AME: { primary: "#006437", secondary: "#000000", pattern: "plain" },
+  // Ceará
+  CEA: { primary: "#000000", secondary: "#ffffff", pattern: "stripes" },
+  // Goiás
+  GOI: { primary: "#006437", secondary: "#ffffff", pattern: "plain" },
+  // Cuiabá
+  CUI: { primary: "#FFD700", secondary: "#006437", pattern: "plain" },
+  // Avaí
+  AVA: { primary: "#003087", secondary: "#ffffff", pattern: "plain" },
 };
 
 const DEFAULT = { primary: "#6b7280", secondary: "#d1d5db", pattern: "plain" as const };
