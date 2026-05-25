@@ -44,6 +44,7 @@ export default function AdminPage() {
   const [importingEmployees, setImportingEmployees] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   useEffect(() => { void load(); void loadEmployeeCount(); }, []);
 
@@ -76,6 +77,21 @@ export default function AdminPage() {
       setImportResult(err instanceof Error ? err.message : "Import failed");
     } finally {
       setImportingEmployees(false);
+    }
+  }
+
+  async function toggleLive(e: React.MouseEvent, comp: CompetitionSummary) {
+    e.stopPropagation();
+    setTogglingId(comp.id);
+    const newStatus = comp.status === "active" ? "draft" : "active";
+    try {
+      await apiFetch(`/api/admin/competitions/${comp.id}`, {
+        method: "PUT",
+        body: { status: newStatus }
+      });
+      setCompetitions((prev) => prev.map((c) => c.id === comp.id ? { ...c, status: newStatus } : c));
+    } catch { /* silent */ } finally {
+      setTogglingId(null);
     }
   }
 
@@ -254,8 +270,11 @@ export default function AdminPage() {
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
                     <span style={{ fontWeight: 800, fontSize: "1.05rem" }}>{comp.name}</span>
-                    <span className={`badge ${comp.registrationOpen ? "badge-available" : "badge-unavailable"}`}>
-                      {comp.registrationOpen ? "Open" : "Closed"}
+                    <span className={`badge ${comp.status === "active" ? "badge-available" : "badge-unavailable"}`}>
+                      {comp.status === "active" ? "● Live" : "Draft"}
+                    </span>
+                    <span className={`badge ${comp.registrationOpen ? "badge-available" : "badge-unavailable"}`} style={{ opacity: 0.7 }}>
+                      {comp.registrationOpen ? "Reg. open" : "Reg. closed"}
                     </span>
                     {leagueCode && (
                       <span className="badge badge-mid">{LEAGUE_LABELS[leagueCode] ?? leagueCode}</span>
@@ -277,6 +296,14 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <button
+                    className={`btn-sm ${comp.status === "active" ? "btn-outline" : "btn"}`}
+                    style={{ minWidth: "82px" }}
+                    disabled={togglingId === comp.id}
+                    onClick={(e) => void toggleLive(e, comp)}
+                  >
+                    {togglingId === comp.id ? "…" : comp.status === "active" ? "Take offline" : "Go live"}
+                  </button>
                   <button
                     className="btn-outline btn-sm"
                     onClick={(e) => { e.stopPropagation(); router.push(`/admin/competitions/${comp.id}`); }}

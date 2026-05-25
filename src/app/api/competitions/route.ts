@@ -4,7 +4,8 @@ import { platformRepository } from "@/server/repositories/platform";
 export async function GET() {
   try {
     const repo = platformRepository();
-    return json({ competitions: await repo.competitions.list() });
+    const all = await repo.competitions.list();
+    return json({ competitions: all.filter((c) => c.status === "active") });
   } catch (error) {
     return handleApiError(error);
   }
