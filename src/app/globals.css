@@ -1,5 +1,83 @@
 @import "tailwindcss";
 
+/* ─── Tailwind v4 theme — maps CSS vars to utility classes ──────────────── */
+@theme {
+  /* Colors */
+  --color-brand:          hsl(var(--brand));
+  --color-brand-hover:    hsl(var(--brand-hover));
+  --color-brand-muted:    hsl(var(--brand-muted));
+  --color-brand-fg:       hsl(var(--brand-fg));
+  --color-accent2:        hsl(var(--accent2));
+  --color-accent2-fg:     hsl(var(--accent2-fg));
+  --color-live:           hsl(var(--live));
+  --color-live-bg:        hsl(var(--live-bg));
+  --color-surface-base:   hsl(var(--surface-base));
+  --color-surface-raised: hsl(var(--surface-raised));
+  --color-surface-overlay:hsl(var(--surface-overlay));
+  --color-surface-sunken: hsl(var(--surface-sunken));
+  --color-ink:            hsl(var(--ink));
+  --color-ink-secondary:  hsl(var(--ink-secondary));
+  --color-ink-muted:      hsl(var(--ink-muted));
+  --color-line:           hsl(var(--line));
+  --color-line-strong:    hsl(var(--line-strong));
+  --color-ok:             hsl(var(--ok));
+  --color-ok-bg:          hsl(var(--ok-bg));
+  --color-danger:         hsl(var(--danger));
+  --color-danger-bg:      hsl(var(--danger-bg));
+  --color-warn:           hsl(var(--warn));
+  --color-warn-bg:        hsl(var(--warn-bg));
+  --color-pos-gk:         hsl(var(--pos-gk));
+  --color-pos-gk-bg:      hsl(var(--pos-gk-bg));
+  --color-pos-def:        hsl(var(--pos-def));
+  --color-pos-def-bg:     hsl(var(--pos-def-bg));
+  --color-pos-mid:        hsl(var(--pos-mid));
+  --color-pos-mid-bg:     hsl(var(--pos-mid-bg));
+  --color-pos-fwd:        hsl(var(--pos-fwd));
+  --color-pos-fwd-bg:     hsl(var(--pos-fwd-bg));
+  /* shadcn compat */
+  --color-background:     hsl(var(--surface-base));
+  --color-foreground:     hsl(var(--ink));
+  --color-border:         hsl(var(--line));
+  --color-input:          hsl(var(--surface-sunken));
+  --color-ring:           hsl(var(--brand));
+
+  /* Font sizes */
+  --text-2xs: 0.625rem;
+
+  /* Border radius — v4 uses --radius-* */
+  --radius-xs:      0.1875rem;
+  --radius-sm:      0.3125rem;
+  --radius-DEFAULT: 0.5rem;
+  --radius-md:      0.625rem;
+  --radius-lg:      0.875rem;
+  --radius-xl:      1.125rem;
+  --radius-2xl:     1.5rem;
+
+  /* Animations */
+  --animate-shimmer:    shimmer 2s linear infinite;
+  --animate-pulse-slow: pulse-slow 2.5s ease-in-out infinite;
+  --animate-score-pop:  score-pop 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-fade-in:    fade-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  @keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+  }
+  @keyframes pulse-slow {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+  @keyframes score-pop {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.18); }
+    100% { transform: scale(1); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
+
 /* ─── BGO Design Tokens ──────────────────────────────────────────────────────
    4-surface depth model. All values in HSL so Tailwind opacity modifiers work.
    ─────────────────────────────────────────────────────────────────────────── */
@@ -62,7 +140,8 @@
   *,
   *::before,
   *::after {
-    @apply box-border border-line;
+    box-sizing: border-box;
+    border-color: hsl(var(--line));
   }
 
   html {
