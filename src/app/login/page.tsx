@@ -23,7 +23,7 @@ export default function LoginPage() {
       await apiFetch("/api/auth/login", {
         method: "POST",
         body: {
-          email: form.get("email"),
+          employeeId: (form.get("employeeId") as string).trim(),
           password: form.get("password")
         }
       });
@@ -41,22 +41,22 @@ export default function LoginPage() {
       <div className="auth-card">
         <span className="auth-logo">BGO</span>
         <h1 className="auth-title">Welcome back</h1>
-        <p className="auth-subtitle">Sign in to your BGO Games account.</p>
+        <p className="auth-subtitle">Sign in with your Employee ID and password.</p>
 
         {error ? <p className="notice notice-error">{error}</p> : null}
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label required" htmlFor="email">
-              Email
+            <label className="form-label required" htmlFor="employeeId">
+              Employee ID
             </label>
             <input
               className="form-input"
-              id="email"
-              name="email"
-              placeholder="you@company.com"
+              id="employeeId"
+              name="employeeId"
+              placeholder="e.g. 00283"
               required
-              type="email"
+              autoFocus
             />
           </div>
 
@@ -81,7 +81,7 @@ export default function LoginPage() {
 
         <p className="auth-footer">
           No account?{" "}
-          <Link href="/register">Create one</Link>
+          <Link href="/register">Register with your Employee ID</Link>
         </p>
       </div>
     </div>

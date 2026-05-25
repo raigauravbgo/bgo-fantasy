@@ -7,12 +7,15 @@ export function usersRepository() {
     async findByEmail(email: string): Promise<User | null> {
       return prisma.user.findUnique({ where: { email: email.toLowerCase() } }) as Promise<User | null>;
     },
+    async findByEmployeeId(employeeId: string): Promise<User | null> {
+      return prisma.user.findUnique({ where: { employeeId } }) as Promise<User | null>;
+    },
     async findById(id: string): Promise<User | null> {
       return prisma.user.findUnique({ where: { id } }) as Promise<User | null>;
     },
     async create(input: {
       name: string;
-      email: string;
+      email?: string;
       employeeId?: string;
       passwordHash: string;
       role?: User["role"];
@@ -22,7 +25,7 @@ export function usersRepository() {
         data: {
           id: newId(),
           name: input.name,
-          email: input.email.toLowerCase(),
+          email: input.email ? input.email.toLowerCase() : null,
           employeeId: input.employeeId,
           passwordHash: input.passwordHash,
           role: input.role ?? "player",

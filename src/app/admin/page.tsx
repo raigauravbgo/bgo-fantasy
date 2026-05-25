@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAdmin } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
@@ -38,14 +38,52 @@ export default function AdminPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  useEffect(() => { void load(); }, []);
+  // Employee roster
+  const [employeeCount, setEmployeeCount] = useState<number | null>(null);
+  const [showEmployeeImport, setShowEmployeeImport] = useState(false);
+  const [importingEmployees, setImportingEmployees] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { void load(); void loadEmployeeCount(); }, []);
+
+  async function loadEmployeeCount() {
+    try {
+      const d = await apiFetch<{ total: number }>("/api/admin/employees/import");
+      setEmployeeCount(d.total);
+    } catch { /* silent */ }
+  }
+
+  async function handleEmployeeUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const file = fileInputRef.current?.files?.[0];
+    if (!file) return;
+    setImportingEmployees(true);
+    setImportResult(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/admin/employees/import", {
+        method: "POST",
+        body: form
+      });
+      const data = await res.json() as { imported?: number; total?: number; error?: string };
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? "Import failed");
+      setImportResult(`Imported ${(data.imported ?? 0).toLocaleString()} new records — ${(data.total ?? 0).toLocaleString()} total in DB`);
+      setEmployeeCount(data.total ?? null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err) {
+      setImportResult(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImportingEmployees(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
     try {
       const data = await apiFetch<{ competitions: CompetitionSummary[] }>("/api/admin/competitions");
       setCompetitions(data.competitions);
-      // Load overview stats for each competition in parallel
       const entries = await Promise.allSettled(
         data.competitions.map((c) =>
           apiFetch<{ teams: unknown[]; players: unknown[]; fixtures: unknown[]; entries: unknown[] }>(
@@ -95,12 +133,58 @@ export default function AdminPage() {
           <h1 className="page-title">Admin Console</h1>
           <p className="page-subtitle">Manage competitions, import data, publish scoring</p>
         </div>
-        <button className="btn" style={{ flexShrink: 0, marginTop: "6px" }} onClick={() => setShowCreate(!showCreate)}>
-          {showCreate ? "Cancel" : "+ New competition"}
-        </button>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0, marginTop: "6px" }}>
+          <button
+            className="btn-outline btn-sm"
+            onClick={() => { setShowEmployeeImport(!showEmployeeImport); setImportResult(null); }}
+          >
+            👥 {employeeCount !== null ? `${employeeCount.toLocaleString()} employees` : "Employee roster"}
+          </button>
+          <button className="btn" onClick={() => setShowCreate(!showCreate)}>
+            {showCreate ? "Cancel" : "+ New competition"}
+          </button>
+        </div>
       </div>
 
-      {/* ── Create form ───────────────────────────────────────── */}
+      {/* ── Employee roster import ─────────────────────────────── */}
+      {showEmployeeImport && (
+        <div className="card" style={{ marginBottom: "28px" }}>
+          <div className="card-title">Employee Roster</div>
+          <p style={{ fontSize: "0.85rem", color: "hsl(var(--ink-muted))", marginBottom: "14px" }}>
+            Upload the employee roster (.xlsx or .csv) to allow employees to self-register.
+            Columns required: <strong>Employee ID</strong>, <strong>Legal Name - Last Name</strong>,
+            <strong> Legal Name - First Name</strong>, <strong>Full Legal Name</strong>, <strong>Hire Date</strong>.
+            Existing records are updated in place (safe to re-upload).
+          </p>
+          {importResult && (
+            <p className={`notice ${importResult.includes("failed") || importResult.includes("error") ? "notice-error" : "notice-success"}`} style={{ marginBottom: "14px" }}>
+              {importResult}
+            </p>
+          )}
+          <form style={{ display: "flex", gap: "10px", alignItems: "flex-end" }} onSubmit={handleEmployeeUpload}>
+            <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+              <label className="form-label required">Roster file (.xlsx or .csv)</label>
+              <input
+                ref={fileInputRef}
+                className="form-input"
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                required
+              />
+            </div>
+            <button className="btn" type="submit" disabled={importingEmployees} style={{ flexShrink: 0 }}>
+              {importingEmployees ? "Importing…" : "Upload & import"}
+            </button>
+          </form>
+          {employeeCount !== null && (
+            <p style={{ marginTop: "10px", fontSize: "0.8rem", color: "hsl(var(--ink-muted))" }}>
+              Currently {employeeCount.toLocaleString()} employees in the database.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── Create competition form ────────────────────────────── */}
       {showCreate && (
         <div className="card" style={{ marginBottom: "28px" }}>
           <div className="card-title">Create Competition</div>

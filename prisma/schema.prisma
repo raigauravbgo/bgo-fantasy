@@ -6,10 +6,21 @@ datasource db {
   provider = "postgresql"
 }
 
+model Employee {
+  id         String   @id
+  employeeId String   @unique
+  lastName   String
+  firstName  String
+  fullName   String
+  hireDate   DateTime
+
+  @@index([employeeId])
+}
+
 model User {
   id           String   @id
   name         String
-  email        String   @unique
+  email        String?  @unique
   employeeId   String?  @unique
   passwordHash String
   role         String   @default("player")

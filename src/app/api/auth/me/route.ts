@@ -7,7 +7,7 @@ export async function GET() {
   const user = await getUserRecord(session.id);
   return json({
     user: user
-      ? { id: user.id, name: user.name, email: user.email, role: user.role }
+      ? { id: user.id, name: user.name, email: user.email ?? null, role: user.role }
       : null
   });
 }

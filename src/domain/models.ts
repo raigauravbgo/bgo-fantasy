@@ -7,7 +7,7 @@ export type AppId = string;
 export type User = {
   id: AppId;
   name: string;
-  email: string;
+  email?: string | null;
   employeeId?: string;
   passwordHash: string;
   role: UserRole;
