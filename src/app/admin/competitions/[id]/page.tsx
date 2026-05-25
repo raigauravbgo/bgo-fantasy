@@ -625,10 +625,28 @@ export default function CompetitionAdminPage() {
             <div style={{ display: "grid", gap: "14px" }}>
               <div className="form-group">
                 <label className="form-label">Fixture</label>
-                <select className="form-input" value={selectedFixtureId} onChange={(e) => setSelectedFixtureId(e.target.value)}>
-                  {fixtures.length === 0 ? <option value="">No fixtures — import first</option> :
-                    fixtures.map((f) => <option key={f.id} value={f.id}>{fixtureLabel(f)}</option>)}
-                </select>
+                {(() => {
+                  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+                  const relevant = fixtures.filter((f) => new Date(f.startTime) >= cutoff);
+                  const hidden = fixtures.length - relevant.length;
+                  const sorted = [...relevant].sort((a, b) =>
+                    a.status === "completed" && b.status !== "completed" ? 1 :
+                    a.status !== "completed" && b.status === "completed" ? -1 :
+                    new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+                  );
+                  return (
+                    <>
+                      <select className="form-input" value={selectedFixtureId} onChange={(e) => setSelectedFixtureId(e.target.value)}>
+                        {sorted.length === 0
+                          ? <option value="">No recent fixtures — import league data first</option>
+                          : sorted.map((f) => <option key={f.id} value={f.id}>{fixtureLabel(f)}</option>)}
+                      </select>
+                      {hidden > 0 && (
+                        <p className="form-hint">{hidden} older fixture{hidden !== 1 ? "s" : ""} from before the last 30 days are hidden.</p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -652,8 +670,13 @@ export default function CompetitionAdminPage() {
               <div className="form-group">
                 <label className="form-label">Fixture</label>
                 <select className="form-input" value={csvFixtureId || selectedFixtureId} onChange={(e) => setCsvFixtureId(e.target.value)}>
-                  {fixtures.length === 0 ? <option value="">No fixtures</option> :
-                    fixtures.map((f) => <option key={f.id} value={f.id}>{fixtureLabel(f)}</option>)}
+                  {fixtures.length === 0 ? <option value="">No fixtures</option> : (() => {
+                    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+                    return fixtures
+                      .filter((f) => new Date(f.startTime) >= cutoff)
+                      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+                      .map((f) => <option key={f.id} value={f.id}>{fixtureLabel(f)}</option>);
+                  })()}
                 </select>
               </div>
               <div className="form-group">

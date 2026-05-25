@@ -142,20 +142,18 @@ export async function POST(
 
     const savedPlayers = await repo.players.upsertMany(playerItems);
 
-    // 3. Fetch fixtures — scheduled first, fall back to finished
-    let rawMatches: FdMatch[] = [];
+    // 3. Fetch upcoming fixtures only — no fallback to finished/historical matches
     const scheduled = await fdFetch<{ matches: FdMatch[] }>(
-      `/competitions/${leagueCode}/matches?status=SCHEDULED&limit=38`,
+      `/competitions/${leagueCode}/matches?status=SCHEDULED&season=${league.season}`,
       apiKey
     );
-    rawMatches = scheduled.matches;
+    const rawMatches = scheduled.matches;
 
     if (rawMatches.length === 0) {
-      const finished = await fdFetch<{ matches: FdMatch[] }>(
-        `/competitions/${leagueCode}/matches?status=FINISHED&limit=38&season=${league.season}`,
-        apiKey
+      throw new RequestError(
+        `No upcoming fixtures found for ${league.name} (season ${league.season}). The season may not have started yet or all fixtures are already completed. Check back when the new season schedule is published.`,
+        404
       );
-      rawMatches = finished.matches;
     }
 
     const fixtureItems = rawMatches.map((m) => {
