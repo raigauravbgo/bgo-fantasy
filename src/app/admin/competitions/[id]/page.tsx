@@ -630,40 +630,16 @@ export default function CompetitionAdminPage() {
                     fixtures.map((f) => <option key={f.id} value={f.id}>{fixtureLabel(f)}</option>)}
                 </select>
               </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Team 1 goals</label>
-                  <input className="form-input" type="number" min={0} value={team1Score} onChange={(e) => setTeam1Score(Number(e.target.value))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Team 2 goals</label>
-                  <input className="form-input" type="number" min={0} value={team2Score} onChange={(e) => setTeam2Score(Number(e.target.value))} />
-                </div>
-              </div>
+
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 <button className="btn-outline" onClick={openPrediction} disabled={!!running}>Open match-winner prediction</button>
-                <button className="btn" onClick={fetchLiveStats} disabled={!!running}>{running ? "Running…" : "⚡ Fetch real stats (API-Football)"}</button>
-                <button className="btn-outline" onClick={publishScoring} disabled={!!running}>{running ? "Running…" : "Import & publish dummy scoring"}</button>
+                <button className="btn" onClick={fetchLiveStats} disabled={!!running}>{running ? "Running…" : "⚡ Fetch & publish real stats"}</button>
+                <button className="btn-outline" onClick={publishScoring} disabled={!!running}>{running ? "Running…" : "Publish dummy scoring (testing)"}</button>
               </div>
               <p className="form-hint">
-                <strong>Fetch real stats</strong> pulls live player data from API-Football (goals, assists, cards, saves, minutes) and imports automatically.
-                After fetching, click Publish below to calculate and publish points.
+                <strong>Fetch &amp; publish real stats</strong> — pulls goals, assists, cards, saves, minutes from API-Football and immediately publishes fantasy points. Score is read from the API automatically.
                 <br />Dummy scoring generates fake stats for testing only.
               </p>
-              <div style={{ marginTop: "10px" }}>
-                <button className="btn btn-sm" onClick={async () => {
-                  const fixtureId = selectedFixtureId || fixtures[0]?.id;
-                  if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
-                  await run("Scoring published", () =>
-                    apiFetch(`/api/admin/fixtures/${fixtureId}/stats/publish`, {
-                      method: "POST",
-                      body: { score: { team1: team1Score, team2: team2Score } }
-                    })
-                  );
-                }} disabled={!!running}>
-                  Publish points from imported stats
-                </button>
-              </div>
             </div>
           </div>
 

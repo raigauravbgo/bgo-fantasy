@@ -1,5 +1,6 @@
 import { handleApiError, json, requireAdminUser, RequestError } from "@/server/api/http";
 import { platformRepository } from "@/server/repositories/platform";
+import { calculateFixtureScoring } from "@/server/services/scoring";
 import { getEnv } from "@/config/env";
 import type { SoccerRawStats } from "@/domain/adapters/soccer/stats-schema";
 
@@ -182,16 +183,52 @@ export async function POST(
       throw new RequestError("No matching players found. Import league data first so player names are in the DB.", 422);
     }
 
-    const saved = await repo.rawStats.upsertMany(statItems);
+    await repo.rawStats.upsertMany(statItems);
+
+    // Auto-publish points using the score we already have
+    const [rawStats, players, entries] = await Promise.all([
+      repo.rawStats.listByFixture(fixtureId),
+      repo.players.list(fixture.competitionId),
+      repo.entries.list(fixture.competitionId)
+    ]);
+
+    const scoring = calculateFixtureScoring({
+      competitionId: fixture.competitionId,
+      fixtureId,
+      rawStats,
+      players,
+      entries,
+      actorUserId: admin.id,
+      status: "published"
+    });
+
+    await repo.points.replaceFixturePoints({
+      competitionId: fixture.competitionId,
+      fixtureId,
+      ...scoring
+    });
+
+    await repo.fixtures.update(fixtureId, {
+      status: "completed",
+      score: { team1: homeGoals, team2: awayGoals },
+      result: {
+        winnerTeamId: homeGoals > awayGoals
+          ? fixture.team1Id
+          : awayGoals > homeGoals
+            ? fixture.team2Id
+            : "draw"
+      }
+    });
 
     await repo.audit.create({
       actorUserId: admin.id,
-      action: "stats.fetch-live",
-      entityType: "raw_stat",
+      action: "stats.fetch-and-publish",
+      entityType: "fixture",
       competitionId: fixture.competitionId,
       entityId: fixtureId,
       after: {
         afFixtureId,
+        score: `${homeGoals}-${awayGoals}`,
         mapped: statItems.length,
         unmapped: unmapped.length,
         unmappedNames: unmapped.slice(0, 10)
@@ -200,10 +237,11 @@ export async function POST(
 
     return json({
       afFixtureId,
+      score: { home: homeGoals, away: awayGoals },
       mapped: statItems.length,
       unmapped: unmapped.length,
       unmappedNames: unmapped,
-      score: { home: homeGoals, away: awayGoals }
+      pointsPublished: true
     });
   } catch (error) {
     return handleApiError(error);
