@@ -91,6 +91,7 @@ export default function AdminPage() {
   const [csvFixtureId, setCsvFixtureId] = useState("");
   const [plImporting, setPlImporting] = useState(false);
   const [plResult, setPlResult] = useState<string | null>(null);
+  const [selectedLeague, setSelectedLeague] = useState("PL");
 
   // Player editing state
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -193,16 +194,16 @@ export default function AdminPage() {
     }
   }
 
-  async function importPremierLeague() {
+  async function importLeague() {
     if (!competition?.id) { setPlResult("No competition selected — create one first."); return; }
     setPlImporting(true);
     setPlResult(null);
     try {
-      const result = await apiFetch<{ imported: { teams: number; players: number; fixtures: number } }>(
-        `/api/admin/competitions/${competition.id}/import-pl`,
-        { method: "POST" }
+      const result = await apiFetch<{ leagueName: string; imported: { teams: number; players: number; fixtures: number } }>(
+        `/api/admin/competitions/${competition.id}/import-league`,
+        { method: "POST", body: { leagueCode: selectedLeague } }
       );
-      setPlResult(`Done — ${result.imported.teams} teams, ${result.imported.players} players, ${result.imported.fixtures} fixtures.`);
+      setPlResult(`${result.leagueName} — ${result.imported.teams} teams, ${result.imported.players} players, ${result.imported.fixtures} fixtures.`);
       void loadOverview(competition.id);
     } catch (err) {
       setPlResult(err instanceof Error ? err.message : "Import failed.");
@@ -547,17 +548,39 @@ export default function AdminPage() {
           </div>
 
           <div className="card">
-            <div className="card-title">Import Premier League Data</div>
+            <div className="card-title">Import League Data</div>
             <p className="card-muted" style={{ marginBottom: "14px" }}>
-              Pulls all 20 PL teams, their squads, and upcoming fixtures from
-              football-data.org. Requires <code>FOOTBALL_DATA_API_KEY</code> env var.
+              Pulls teams, squads, and fixtures from football-data.org. Each competition
+              holds one league's players — create a new competition for a different league.
               Safe to re-run — existing records are updated, not duplicated.
             </p>
-            <button className="btn" onClick={importPremierLeague} disabled={plImporting}>
-              {plImporting ? "Importing…" : "Import Premier League"}
-            </button>
+            <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
+              <div className="form-group" style={{ flex: "1", minWidth: "200px", marginBottom: 0 }}>
+                <label className="form-label">League</label>
+                <select
+                  className="form-input"
+                  value={selectedLeague}
+                  onChange={(e) => { setSelectedLeague(e.target.value); setPlResult(null); }}
+                >
+                  <option value="PL">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League (England)</option>
+                  <option value="BL1">🇩🇪 Bundesliga (Germany)</option>
+                  <option value="PD">🇪🇸 La Liga (Spain)</option>
+                  <option value="SA">🇮🇹 Serie A (Italy)</option>
+                  <option value="FL1">🇫🇷 Ligue 1 (France)</option>
+                  <option value="DED">🇳🇱 Eredivisie (Netherlands)</option>
+                  <option value="PPL">🇵🇹 Primeira Liga (Portugal)</option>
+                  <option value="ELC">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship (England)</option>
+                  <option value="BSA">🇧🇷 Brasileirão (Brazil)</option>
+                </select>
+              </div>
+              <div style={{ paddingTop: "22px" }}>
+                <button className="btn" onClick={importLeague} disabled={plImporting}>
+                  {plImporting ? "Importing…" : "Import"}
+                </button>
+              </div>
+            </div>
             {plResult && (
-              <p className={`notice ${plResult.startsWith("Done") ? "" : "notice-error"}`} style={{ marginTop: "12px" }}>
+              <p className={`notice ${plResult.includes("teams") ? "" : "notice-error"}`} style={{ marginTop: "12px" }}>
                 {plResult}
               </p>
             )}

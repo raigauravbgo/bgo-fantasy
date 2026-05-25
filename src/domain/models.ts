@@ -28,6 +28,7 @@ export type Competition = {
     budget?: number;
     squadSize?: number;
     maxPlayersPerTeam?: number;
+    leagueCode?: string;
     predictionPointsMode?: "overall" | "separate";
     transferWindow?: TransferWindow | null;
     allowUnavailablePlayers?: boolean;
