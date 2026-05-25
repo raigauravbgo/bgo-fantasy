@@ -6,76 +6,65 @@ import { apiFetch } from "@/lib/api";
 import type { FantasyEntry, Player } from "@/lib/types";
 import { JerseyIcon } from "@/components/jersey-icon";
 
-const POSITION_ORDER = ["GK", "DEF", "MID", "FWD"] as const;
-type Position = (typeof POSITION_ORDER)[number];
+type Position = "GK" | "DEF" | "MID" | "FWD";
+const POSITION_ORDER: Position[] = ["GK", "DEF", "MID", "FWD"];
 
+// Fixed 15-man squad layout — 2 GK, 5 DEF, 5 MID, 3 FWD
+const PITCH_SLOTS: Record<Position, number> = { GK: 2, DEF: 5, MID: 5, FWD: 3 };
 const POSITION_LIMITS: Record<Position, { min: number; max: number }> = {
-  GK: { min: 1, max: 1 },
-  DEF: { min: 3, max: 5 },
-  MID: { min: 3, max: 5 },
-  FWD: { min: 1, max: 3 }
+  GK:  { min: 2, max: 2 },
+  DEF: { min: 5, max: 5 },
+  MID: { min: 5, max: 5 },
+  FWD: { min: 3, max: 3 },
 };
 
-const SQUAD_SIZE = 11;
+const POS_LABELS: Record<Position, string> = {
+  GK: "Goalkeepers", DEF: "Defenders", MID: "Midfielders", FWD: "Forwards"
+};
+
 const DEFAULT_BUDGET = 100;
+const SQUAD_SIZE = 15;
 
-function positionBadge(pos: string) {
-  return (
-    <span className={`badge badge-${pos.toLowerCase()}`}>{pos}</span>
-  );
-}
+type SortKey = "pts" | "price";
 
-function statusBadge(status: string) {
-  if (status === "available") return null;
-  return <span className={`badge badge-${status}`}>{status}</span>;
-}
-
-function validateSquadClient(
+function validateSquad(
   players: Player[],
   captainId: string,
-  viceCaptainId: string,
+  vcId: string,
   budget: number,
   maxPerTeam: number,
   squadSize: number
 ) {
   const errors: string[] = [];
   const budgetUsed = players.reduce((s, p) => s + p.price, 0);
-  const byCounts: Record<string, number> = {};
   const posCounts: Record<string, number> = {};
-
+  const teamCounts: Record<string, number> = {};
   for (const p of players) {
     posCounts[p.position] = (posCounts[p.position] ?? 0) + 1;
-    const team = p.teamId;
-    byCounts[team] = (byCounts[team] ?? 0) + 1;
+    teamCounts[p.teamId] = (teamCounts[p.teamId] ?? 0) + 1;
   }
-
   if (players.length !== squadSize)
-    errors.push(`Squad must contain exactly ${squadSize} players`);
+    errors.push(`Select exactly ${squadSize} players (${players.length} chosen)`);
   if (budgetUsed > budget)
-    errors.push(`Over budget by ${(budgetUsed - budget).toFixed(1)}`);
-
+    errors.push(`Over budget by £${(budgetUsed - budget).toFixed(1)}m`);
   for (const pos of POSITION_ORDER) {
     const count = posCounts[pos] ?? 0;
     const { min, max } = POSITION_LIMITS[pos];
     if (count < min || count > max)
       errors.push(`${pos}: need ${min}–${max} (have ${count})`);
   }
-
-  for (const [team, count] of Object.entries(byCounts)) {
-    if (count > maxPerTeam)
-      errors.push(
-        `Too many players from one team (max ${maxPerTeam} per team)`
-      );
-    void team;
+  for (const count of Object.values(teamCounts)) {
+    if (count > maxPerTeam) {
+      errors.push(`Max ${maxPerTeam} players from one club`);
+      break;
+    }
   }
-
-  const ids = new Set(players.map((p) => p.id));
-  if (!captainId || !ids.has(captainId)) errors.push("Select a captain");
-  if (!viceCaptainId || !ids.has(viceCaptainId))
+  if (!captainId || !players.find((p) => p.id === captainId))
+    errors.push("Select a captain");
+  if (!vcId || !players.find((p) => p.id === vcId))
     errors.push("Select a vice-captain");
-  if (captainId && viceCaptainId && captainId === viceCaptainId)
+  if (captainId && vcId && captainId === vcId)
     errors.push("Captain and vice-captain must be different");
-
   return { errors, budgetUsed };
 }
 
@@ -86,10 +75,11 @@ export default function SquadPage() {
   const [entry, setEntry] = useState<FantasyEntry | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [captainId, setCaptainId] = useState("");
-  const [viceCaptainId, setViceCaptainId] = useState("");
+  const [vcId, setVcId] = useState("");
   const [squadName, setSquadName] = useState("My BGO XI");
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState<Position | "ALL">("ALL");
+  const [sortKey, setSortKey] = useState<SortKey>("pts");
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const [mobileTab, setMobileTab] = useState<"market" | "squad">("market");
@@ -109,7 +99,7 @@ export default function SquadPage() {
         setEntry(eData.entry);
         setSelectedIds(eData.entry.playerIds);
         setCaptainId(eData.entry.captainId ?? "");
-        setViceCaptainId(eData.entry.viceCaptainId ?? "");
+        setVcId(eData.entry.viceCaptainId ?? "");
         setSquadName(eData.entry.name);
       }
     }).catch((err) =>
@@ -117,40 +107,59 @@ export default function SquadPage() {
     );
   }, [competition?.slug]);
 
-  const playerMap = useMemo(
-    () => new Map(allPlayers.map((p) => [p.id, p])),
-    [allPlayers]
-  );
-
+  const playerMap = useMemo(() => new Map(allPlayers.map((p) => [p.id, p])), [allPlayers]);
   const selectedPlayers = useMemo(
     () => selectedIds.map((id) => playerMap.get(id)).filter(Boolean) as Player[],
     [selectedIds, playerMap]
   );
-
   const { errors, budgetUsed } = useMemo(
-    () => validateSquadClient(selectedPlayers, captainId, viceCaptainId, budget, maxPerTeam, squadSize),
-    [selectedPlayers, captainId, viceCaptainId, budget, maxPerTeam]
+    () => validateSquad(selectedPlayers, captainId, vcId, budget, maxPerTeam, squadSize),
+    [selectedPlayers, captainId, vcId, budget, maxPerTeam, squadSize]
   );
+  const isLocked = !!(entry?.locked && !competition?.settings?.transferWindow?.active);
+  const bankLeft = budget - budgetUsed;
 
-  const isValid = errors.length === 0;
+  const squadByPos = useMemo(() => {
+    const g: Record<Position, Player[]> = { GK: [], DEF: [], MID: [], FWD: [] };
+    for (const id of selectedIds) {
+      const p = playerMap.get(id);
+      if (p) g[p.position as Position].push(p);
+    }
+    return g;
+  }, [selectedIds, playerMap]);
 
   const filteredPlayers = useMemo(() => {
-    return allPlayers.filter((p) => {
-      if (posFilter !== "ALL" && p.position !== posFilter) return false;
-      if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
-      return true;
-    });
-  }, [allPlayers, posFilter, search]);
+    return allPlayers
+      .filter((p) => {
+        if (posFilter !== "ALL" && p.position !== posFilter) return false;
+        if (search && !p.name.toLowerCase().includes(search.toLowerCase()) &&
+            !(p.teamShortName ?? "").toLowerCase().includes(search.toLowerCase())) return false;
+        return true;
+      })
+      .sort((a, b) => sortKey === "pts"
+        ? ((b.totalPoints ?? 0) - (a.totalPoints ?? 0)) || (b.price - a.price)
+        : (b.price - a.price) || ((b.totalPoints ?? 0) - (a.totalPoints ?? 0))
+      );
+  }, [allPlayers, posFilter, search, sortKey]);
+
+  // Group filtered players by position for display
+  const groupedFiltered = useMemo(() => {
+    if (posFilter !== "ALL") return { [posFilter]: filteredPlayers } as Record<string, Player[]>;
+    const g: Record<string, Player[]> = {};
+    for (const pos of POSITION_ORDER) {
+      const pp = filteredPlayers.filter((p) => p.position === pos);
+      if (pp.length > 0) g[pos] = pp;
+    }
+    return g;
+  }, [filteredPlayers, posFilter]);
 
   function togglePlayer(player: Player) {
-    if (entry?.locked && !competition?.settings?.transferWindow?.active) return;
+    if (isLocked) return;
     if (player.status === "unavailable") return;
-
     setSelectedIds((curr) => {
       if (curr.includes(player.id)) {
-        // Deselect — also clear C/VC if this was them
         if (captainId === player.id) setCaptainId("");
-        if (viceCaptainId === player.id) setViceCaptainId("");
+        if (vcId === player.id) setVcId("");
         return curr.filter((id) => id !== player.id);
       }
       if (curr.length >= squadSize) return curr;
@@ -160,21 +169,16 @@ export default function SquadPage() {
 
   async function saveSquad(lock = false) {
     if (!competition?.slug) return;
-    setSaving(true);
-    setNotice(null);
+    setSaving(true); setNotice(null);
     try {
       await apiFetch(`/api/competitions/${competition.slug}/my-entry`, {
         method: "POST",
-        body: { name: squadName, playerIds: selectedIds, captainId, viceCaptainId }
+        body: { name: squadName, playerIds: selectedIds, captainId, viceCaptainId: vcId }
       });
       if (lock) {
-        await apiFetch(`/api/competitions/${competition.slug}/my-entry/lock`, {
-          method: "POST"
-        });
+        await apiFetch(`/api/competitions/${competition.slug}/my-entry/lock`, { method: "POST" });
       }
-      const updated = await apiFetch<{ entry: FantasyEntry | null }>(
-        `/api/competitions/${competition.slug}/my-entry`
-      );
+      const updated = await apiFetch<{ entry: FantasyEntry | null }>(`/api/competitions/${competition.slug}/my-entry`);
       setEntry(updated.entry);
       setNotice({ type: "ok", msg: lock ? "Squad locked." : "Squad saved." });
     } catch (err) {
@@ -184,220 +188,379 @@ export default function SquadPage() {
     }
   }
 
-  const isLocked = entry?.locked && !competition?.settings?.transferWindow?.active;
+  // ── Player list row ─────────────────────────────────────────────────────────
+  function PlayerRow({ player }: { player: Player }) {
+    const isSelected = selectedIds.includes(player.id);
+    const isCap = captainId === player.id;
+    const isVC = vcId === player.id;
+    const full = !isSelected && selectedIds.length >= squadSize;
+    const unavailable = player.status === "unavailable" || (full && !isSelected);
 
-  // Squad grouped by position
-  const squadByPosition = useMemo(() => {
-    const grouped: Record<Position, Player[]> = {
-      GK: [], DEF: [], MID: [], FWD: []
-    };
-    for (const id of selectedIds) {
-      const p = playerMap.get(id);
-      if (p) grouped[p.position as Position].push(p);
-    }
-    return grouped;
-  }, [selectedIds, playerMap]);
+    return (
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "36px 1fr auto auto 36px",
+          alignItems: "center",
+          gap: "8px",
+          padding: "7px 10px",
+          borderBottom: "1px solid hsl(var(--line))",
+          opacity: unavailable && !isSelected ? 0.45 : 1,
+          background: isSelected ? "hsl(var(--brand-muted))" : undefined,
+          cursor: isLocked || (unavailable && !isSelected) ? "default" : "pointer",
+          transition: "background 100ms"
+        }}
+        onClick={() => !isLocked && !unavailable ? togglePlayer(player) : undefined}
+      >
+        {/* Jersey */}
+        <JerseyIcon tla={player.teamShortName ?? ""} size={28} />
 
-  // Constraint checklist items
-  const constraints = [
-    { label: `Players: ${selectedIds.length}/${squadSize}`, met: selectedIds.length === squadSize },
-    { label: `Budget: ${budgetUsed}/${budget}`, met: budgetUsed <= budget },
-    ...POSITION_ORDER.map((pos) => {
-      const count = squadByPosition[pos].length;
-      const { min, max } = POSITION_LIMITS[pos];
-      return { label: `${pos}: ${count} (need ${min}–${max})`, met: count >= min && count <= max };
-    }),
-    { label: "Captain selected", met: !!captainId && selectedIds.includes(captainId) },
-    { label: "Vice-captain selected", met: !!viceCaptainId && selectedIds.includes(viceCaptainId) }
-  ];
-
-  const MarketPanel = (
-    <div>
-      <div className="card-title">Player Marketplace</div>
-      <div className="filter-bar">
-        <input
-          className="filter-search"
-          placeholder="Search players…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <div className="pos-tabs">
-          {(["ALL", ...POSITION_ORDER] as const).map((pos) => (
-            <button
-              key={pos}
-              className={`pos-tab ${posFilter === pos ? "active" : ""}`}
-              onClick={() => setPosFilter(pos)}
-            >
-              {pos}
-            </button>
-          ))}
+        {/* Name + club */}
+        <div>
+          <div style={{ fontWeight: 700, fontSize: "0.85rem", lineHeight: 1.2 }}>
+            {player.name}
+            {isCap && <span style={{ marginLeft: "5px", fontSize: "0.65rem", background: "hsl(var(--accent2))", color: "hsl(var(--accent2-fg))", borderRadius: "3px", padding: "1px 4px", fontWeight: 800 }}>C</span>}
+            {isVC && <span style={{ marginLeft: "5px", fontSize: "0.65rem", background: "hsl(var(--brand))", color: "hsl(var(--brand-fg))", borderRadius: "3px", padding: "1px 4px", fontWeight: 800 }}>V</span>}
+          </div>
+          <div style={{ fontSize: "0.72rem", color: "hsl(var(--ink-muted))", marginTop: "1px" }}>
+            {player.teamShortName ?? "—"} · <span className={`badge badge-${player.position.toLowerCase()}`} style={{ fontSize: "0.62rem", padding: "0 3px" }}>{player.position}</span>
+            {player.status !== "available" && <span className={`badge badge-${player.status}`} style={{ marginLeft: "4px", fontSize: "0.62rem" }}>{player.status}</span>}
+          </div>
         </div>
+
+        {/* Price */}
+        <div style={{ fontWeight: 700, fontSize: "0.82rem", textAlign: "right", color: "hsl(var(--ink))" }}>
+          £{player.price}m
+        </div>
+
+        {/* Points */}
+        <div style={{ fontWeight: 600, fontSize: "0.82rem", textAlign: "right", color: "hsl(var(--brand))", minWidth: "36px" }}>
+          {player.totalPoints != null ? `${player.totalPoints}` : "—"}
+        </div>
+
+        {/* Add/remove button */}
+        <button
+          style={{
+            width: "28px", height: "28px", borderRadius: "50%",
+            border: `2px solid ${isSelected ? "hsl(var(--danger))" : "hsl(var(--brand))"}`,
+            background: "transparent",
+            color: isSelected ? "hsl(var(--danger))" : "hsl(var(--brand))",
+            fontWeight: 900, fontSize: "1.1rem", lineHeight: 1,
+            cursor: isLocked || (unavailable && !isSelected) ? "not-allowed" : "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+            transition: "all 100ms"
+          }}
+          disabled={!!isLocked || (unavailable && !isSelected)}
+          onClick={(e) => { e.stopPropagation(); togglePlayer(player); }}
+        >
+          {isSelected ? "−" : "+"}
+        </button>
       </div>
+    );
+  }
 
-      {filteredPlayers.length === 0 ? (
-        <p className="empty-state">No players match your filters.</p>
-      ) : (
-        <div className="player-grid">
-          {filteredPlayers.map((player) => {
-            const isSelected = selectedIds.includes(player.id);
-            const isCap = captainId === player.id;
-            const isVC = viceCaptainId === player.id;
-            const unavailable =
-              player.status === "unavailable" ||
-              (!isSelected && selectedIds.length >= squadSize);
-
-            return (
-              <button
-                key={player.id}
-                className={`player-card ${isSelected ? "selected" : ""}`}
-                disabled={!!isLocked || (unavailable && !isSelected)}
-                onClick={() => togglePlayer(player)}
-              >
-                <div className="player-card-top">
-                  {positionBadge(player.position)}
-                  <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
-                    {isCap && <span className="player-cap-label">C</span>}
-                    {isVC && <span className="player-cap-label">VC</span>}
-                  </div>
-                </div>
-                <div style={{ display: "flex", justifyContent: "center", margin: "4px 0 2px" }}>
-                  <JerseyIcon tla={player.teamShortName ?? ""} size={34} />
-                </div>
-                <div className="player-name">{player.name}</div>
-                <div className="player-meta">
-                  <span>{player.teamShortName ?? "—"}</span>
-                  {statusBadge(player.status)}
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px" }}>
-                  <span className="player-price">£{player.price}</span>
-                  {player.totalPoints != null ? (
-                    <span className="player-pts">{player.totalPoints} pts</span>
-                  ) : null}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-
-  // Pitch player token — jersey + name + price/pts + C/VC/remove
-  function PitchPlayer({ p, isEmpty, pos }: { p?: Player; isEmpty?: true; pos: Position }) {
-    if (!p || isEmpty) {
+  // ── Pitch player token ──────────────────────────────────────────────────────
+  function PitchSlot({ player, pos }: { player?: Player; pos: Position }) {
+    if (!player) {
       return (
-        <div className="pitch-slot-empty" onClick={() => setPosFilter(pos)}>
-          <span className="pitch-slot-plus">+</span>
-          <span className="pitch-slot-pos">{pos}</span>
+        <div
+          onClick={() => setPosFilter(pos)}
+          style={{
+            display: "flex", flexDirection: "column", alignItems: "center",
+            gap: "3px", cursor: "pointer", minWidth: "56px", maxWidth: "68px"
+          }}
+        >
+          <div style={{
+            width: "44px", height: "44px", borderRadius: "50%",
+            background: "rgba(0,0,0,0.3)", border: "2px dashed rgba(255,255,255,0.4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "rgba(255,255,255,0.6)", fontSize: "1.2rem", fontWeight: 300
+          }}>
+            +
+          </div>
+          <div style={{ fontSize: "0.62rem", fontWeight: 800, color: "rgba(255,255,255,0.5)", letterSpacing: "0.05em" }}>{pos}</div>
         </div>
       );
     }
-    const isCap = captainId === p.id;
-    const isVC = viceCaptainId === p.id;
+
+    const isCap = captainId === player.id;
+    const isVC = vcId === player.id;
+    const shortName = player.name.split(" ").slice(-1)[0] ?? player.name;
     const multiplier = isCap ? 2 : isVC ? 1.5 : 1;
-    const effectivePts = p.totalPoints != null ? p.totalPoints * multiplier : null;
-    const shortName = p.name.split(" ").pop() ?? p.name;
+    const pts = player.totalPoints != null ? player.totalPoints * multiplier : null;
+
     return (
-      <div className={`pitch-player ${isCap ? "is-cap" : isVC ? "is-vc" : ""}`}>
-        <div style={{ position: "relative", display: "inline-block" }}>
-          <JerseyIcon tla={p.teamShortName ?? ""} size={40} />
-          {(isCap || isVC) && (
-            <span className="pitch-armband">{isCap ? "C" : "VC"}</span>
-          )}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", minWidth: "56px", maxWidth: "72px", position: "relative" }}>
+        {/* Armband */}
+        {(isCap || isVC) && (
+          <div style={{
+            position: "absolute", top: 0, right: "6px",
+            width: "16px", height: "16px", borderRadius: "50%",
+            background: isCap ? "hsl(var(--accent2))" : "hsl(var(--brand))",
+            color: isCap ? "hsl(var(--accent2-fg))" : "hsl(var(--brand-fg))",
+            fontSize: "0.55rem", fontWeight: 900,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 2
+          }}>
+            {isCap ? "C" : "V"}
+          </div>
+        )}
+
+        <JerseyIcon tla={player.teamShortName ?? ""} size={42} />
+
+        {/* Name */}
+        <div style={{
+          fontSize: "0.67rem", fontWeight: 700, color: "#fff",
+          textShadow: "0 1px 4px rgba(0,0,0,0.9)",
+          maxWidth: "68px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          textAlign: "center"
+        }}>
+          {shortName}
         </div>
-        <div className="pitch-player-name">{shortName}</div>
-        <div className="pitch-player-price">
-          {effectivePts != null && effectivePts !== 0
-            ? <span style={{ color: effectivePts > 0 ? "#4ade80" : "#f87171" }}>{effectivePts % 1 ? effectivePts.toFixed(1) : effectivePts}pts</span>
-            : <span>£{p.price}</span>
-          }
+
+        {/* Price / pts */}
+        <div style={{
+          fontSize: "0.62rem", fontWeight: 700, color: "#fff",
+          background: "rgba(0,0,0,0.65)", borderRadius: "3px", padding: "1px 5px",
+          fontVariantNumeric: "tabular-nums"
+        }}>
+          {pts != null && pts !== 0
+            ? <span style={{ color: pts > 0 ? "#4ade80" : "#f87171" }}>{pts % 1 ? pts.toFixed(1) : pts}pts</span>
+            : `£${player.price}m`}
         </div>
+
+        {/* Actions */}
         {!isLocked && (
-          <div className="pitch-player-actions">
-            <button className={`pitch-btn-cap ${isCap ? "active-cap" : ""}`} onClick={() => setCaptainId(isCap ? "" : p.id)} title="Captain">C</button>
-            <button className={`pitch-btn-cap ${isVC ? "active-vc" : ""}`} onClick={() => setViceCaptainId(isVC ? "" : p.id)} title="Vice-captain">V</button>
-            <button className="pitch-btn-remove" onClick={() => togglePlayer(p)} title="Remove">×</button>
+          <div style={{ display: "flex", gap: "2px", marginTop: "2px" }}>
+            <button
+              onClick={() => setCaptainId(isCap ? "" : player.id)}
+              title="Captain"
+              style={{
+                fontSize: "0.58rem", fontWeight: 900, padding: "1px 4px",
+                borderRadius: "2px", border: "1px solid rgba(255,255,255,0.3)",
+                background: isCap ? "hsl(var(--accent2))" : "rgba(0,0,0,0.5)",
+                color: isCap ? "hsl(var(--accent2-fg))" : "#fff",
+                cursor: "pointer"
+              }}
+            >C</button>
+            <button
+              onClick={() => setVcId(isVC ? "" : player.id)}
+              title="Vice-captain"
+              style={{
+                fontSize: "0.58rem", fontWeight: 900, padding: "1px 4px",
+                borderRadius: "2px", border: "1px solid rgba(255,255,255,0.3)",
+                background: isVC ? "hsl(var(--brand))" : "rgba(0,0,0,0.5)",
+                color: "#fff", cursor: "pointer"
+              }}
+            >V</button>
+            <button
+              onClick={() => togglePlayer(player)}
+              title="Remove"
+              style={{
+                fontSize: "0.75rem", fontWeight: 900, padding: "1px 4px",
+                borderRadius: "2px", border: "none",
+                background: "rgba(185,28,28,0.7)", color: "#fff", cursor: "pointer"
+              }}
+            >×</button>
           </div>
         )}
       </div>
     );
   }
 
-  function PitchRow({ pos, count }: { pos: Position; count: number }) {
-    const players = squadByPosition[pos];
+  function PitchRow({ pos }: { pos: Position }) {
+    const slots = PITCH_SLOTS[pos];
+    const players = squadByPos[pos];
     return (
-      <div className="pitch-row">
-        {Array.from({ length: count }).map((_, i) =>
-          players[i]
-            ? <PitchPlayer key={players[i].id} p={players[i]} pos={pos} />
-            : <PitchPlayer key={`empty-${i}`} isEmpty pos={pos} />
-        )}
+      <div style={{ display: "flex", justifyContent: "center", gap: "6px", margin: "6px 0" }}>
+        {Array.from({ length: slots }).map((_, i) => (
+          <PitchSlot key={i} player={players[i]} pos={pos} />
+        ))}
       </div>
     );
   }
 
-  const gkCount = Math.max(squadByPosition.GK.length, POSITION_LIMITS.GK.min);
-  const defCount = Math.max(squadByPosition.DEF.length, POSITION_LIMITS.DEF.min);
-  const midCount = Math.max(squadByPosition.MID.length, POSITION_LIMITS.MID.min);
-  const fwdCount = Math.max(squadByPosition.FWD.length, POSITION_LIMITS.FWD.min);
+  // ── Market panel ─────────────────────────────────────────────────────────────
+  const MarketPanel = (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* Search */}
+      <div style={{ position: "relative", marginBottom: "10px" }}>
+        <span style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--ink-muted))", pointerEvents: "none", fontSize: "0.9rem" }}>🔍</span>
+        <input
+          className="filter-search"
+          style={{ paddingLeft: "32px", width: "100%" }}
+          placeholder="Search by name or club…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
 
+      {/* Filters + sort */}
+      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px", alignItems: "center" }}>
+        <div className="pos-tabs" style={{ flex: 1 }}>
+          {(["ALL", ...POSITION_ORDER] as const).map((pos) => (
+            <button key={pos} className={`pos-tab ${posFilter === pos ? "active" : ""}`} onClick={() => setPosFilter(pos)}>
+              {pos === "ALL" ? "All" : pos}
+            </button>
+          ))}
+        </div>
+        <select
+          className="form-input"
+          style={{ minHeight: 0, height: "32px", padding: "0 8px", fontSize: "0.78rem", width: "auto" }}
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as SortKey)}
+        >
+          <option value="pts">Sort: Total points</option>
+          <option value="price">Sort: Price</option>
+        </select>
+      </div>
+
+      {/* Column headers */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "36px 1fr auto auto 36px",
+        gap: "8px", padding: "5px 10px",
+        fontSize: "0.68rem", fontWeight: 700, color: "hsl(var(--ink-muted))",
+        textTransform: "uppercase", letterSpacing: "0.06em",
+        borderBottom: "1px solid hsl(var(--line-strong))"
+      }}>
+        <div />
+        <div>Player</div>
+        <div style={{ textAlign: "right" }}>Price</div>
+        <div style={{ textAlign: "right" }}>Pts</div>
+        <div />
+      </div>
+
+      {/* Player rows grouped by position */}
+      <div style={{ overflow: "auto", flex: 1 }}>
+        {Object.entries(groupedFiltered).map(([pos, players]) => (
+          <div key={pos}>
+            <div style={{
+              padding: "6px 10px 4px",
+              fontSize: "0.72rem", fontWeight: 800,
+              color: "hsl(var(--ink-secondary))",
+              background: "hsl(var(--surface-sunken))",
+              borderBottom: "1px solid hsl(var(--line))",
+              display: "flex", justifyContent: "space-between", alignItems: "center"
+            }}>
+              <span>{POS_LABELS[pos as Position]}</span>
+              <span style={{ color: "hsl(var(--ink-muted))", fontWeight: 600 }}>
+                {squadByPos[pos as Position]?.length ?? 0} / {PITCH_SLOTS[pos as Position]} selected
+              </span>
+            </div>
+            {players.map((p) => <PlayerRow key={p.id} player={p} />)}
+          </div>
+        ))}
+        {filteredPlayers.length === 0 && (
+          <p className="empty-state">No players match your filters.</p>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── Squad / pitch panel ───────────────────────────────────────────────────────
   const SquadPanel = (
-    <div className="squad-panel">
-      {/* Header row */}
-      <div className="squad-header-bar">
+    <div style={{ position: "sticky", top: "68px" }}>
+      {/* Header bar */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", flexWrap: "wrap" }}>
         <input
           className="squad-name-input"
+          style={{ flex: 1, minWidth: "120px" }}
           disabled={!!isLocked}
-          placeholder="Squad name"
+          placeholder="Team name"
           value={squadName}
           onChange={(e) => setSquadName(e.target.value)}
         />
-        <div className="squad-budget-chip" style={{ color: budgetUsed > budget ? "var(--error)" : undefined }}>
-          £{(budget - budgetUsed).toFixed(1)} left
+        <div style={{
+          background: selectedIds.length === 0 ? "hsl(var(--danger))" : selectedIds.length === squadSize ? "hsl(var(--ok))" : "hsl(var(--warn))",
+          color: "#fff", borderRadius: "6px", padding: "4px 10px",
+          fontSize: "0.78rem", fontWeight: 800, whiteSpace: "nowrap"
+        }}>
+          {selectedIds.length} / {squadSize}
+        </div>
+        <div style={{
+          background: bankLeft < 0 ? "hsl(var(--danger))" : "hsl(142 64% 30%)",
+          color: "#fff", borderRadius: "6px", padding: "4px 10px",
+          fontSize: "0.78rem", fontWeight: 800, whiteSpace: "nowrap"
+        }}>
+          £{bankLeft.toFixed(1)}m
         </div>
       </div>
 
       {isLocked && (
-        <p className="notice" style={{ marginBottom: "10px", fontSize: "0.8rem" }}>
-          Squad is locked. Transfers open when admin opens a window.
+        <p className="notice" style={{ marginBottom: "8px", fontSize: "0.8rem" }}>
+          Squad locked — transfers open when admin opens a window.
         </p>
       )}
 
       {/* Pitch */}
-      <div className="pitch-wrap">
-        <div className="pitch-surface">
-          {/* centre circle */}
-          <div className="pitch-centre-line" />
-          <PitchRow pos="FWD" count={fwdCount} />
-          <PitchRow pos="MID" count={midCount} />
-          <PitchRow pos="DEF" count={defCount} />
-          <PitchRow pos="GK"  count={gkCount}  />
+      <div style={{
+        borderRadius: "12px", overflow: "hidden",
+        border: "2px solid #166534",
+        boxShadow: "0 0 0 4px rgba(0,0,0,0.4), 0 16px 48px rgba(0,0,0,0.6)"
+      }}>
+        {/* Goal net */}
+        <div style={{
+          background: "linear-gradient(180deg, #a3c4bc 0%, #4ade80 40%)",
+          padding: "6px 8px 0",
+          borderBottom: "2px solid rgba(255,255,255,0.15)"
+        }}>
+          <div style={{
+            width: "40%", margin: "0 auto",
+            border: "2px solid rgba(255,255,255,0.5)",
+            borderBottom: "none", borderRadius: "4px 4px 0 0",
+            height: "18px",
+            background: "repeating-linear-gradient(90deg, transparent, transparent 4px, rgba(255,255,255,0.15) 4px, rgba(255,255,255,0.15) 5px)"
+          }} />
+        </div>
+
+        {/* Pitch surface */}
+        <div style={{
+          background: "linear-gradient(180deg, #16a34a 0%, #15803d 10%, #16a34a 10%, #16a34a 20%, #15803d 20%, #15803d 30%, #16a34a 30%, #16a34a 40%, #15803d 40%, #15803d 50%, #16a34a 50%, #16a34a 60%, #15803d 60%, #15803d 70%, #16a34a 70%, #16a34a 80%, #15803d 80%, #15803d 90%, #16a34a 90%, #16a34a 100%)",
+          padding: "10px 4px 14px", position: "relative"
+        }}>
+          {/* Centre line */}
+          <div style={{ position: "absolute", top: "50%", left: "6%", right: "6%", height: "1px", background: "rgba(255,255,255,0.2)" }} />
+          {/* Centre circle */}
+          <div style={{
+            position: "absolute", top: "50%", left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: "60px", height: "60px", borderRadius: "50%",
+            border: "1px solid rgba(255,255,255,0.2)"
+          }} />
+
+          <PitchRow pos="GK" />
+          <PitchRow pos="DEF" />
+          <PitchRow pos="MID" />
+          <PitchRow pos="FWD" />
         </div>
       </div>
 
-      {/* Constraint checklist */}
-      <div className="constraint-checklist" style={{ marginTop: "10px" }}>
-        {constraints.map((c, i) => (
-          <div key={i} className={`constraint-item ${c.met ? "met" : ""}`}>{c.label}</div>
-        ))}
-      </div>
+      {/* Validation errors */}
+      {errors.length > 0 && !isLocked && (
+        <ul className="validation-list" style={{ marginTop: "10px" }}>
+          {errors.map((e, i) => <li key={i}>{e}</li>)}
+        </ul>
+      )}
 
+      {/* Notice */}
       {notice && (
         <p className={`notice ${notice.type === "err" ? "notice-error" : ""}`} style={{ marginTop: "8px" }}>
           {notice.msg}
         </p>
       )}
 
+      {/* Actions */}
       {!isLocked && (
-        <div className="squad-actions">
-          <button className="btn-outline" disabled={saving} onClick={() => saveSquad(false)}>
+        <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
+          <button className="btn-outline" style={{ flex: 1 }} disabled={saving} onClick={() => saveSquad(false)}>
             {saving ? "Saving…" : "Save"}
           </button>
           <button
-            className="btn"
-            disabled={saving || !isValid}
+            className="btn" style={{ flex: 1 }}
+            disabled={saving || errors.length > 0}
             onClick={() => {
-              if (confirm("Lock your squad? You won't be able to change it without an admin transfer window.")) {
+              if (confirm("Lock your squad? You won't be able to change it without a transfer window.")) {
                 void saveSquad(true);
               }
             }}
@@ -414,22 +577,16 @@ export default function SquadPage() {
       <div className="page-header">
         <h1 className="page-title">Squad Builder</h1>
         <p className="page-subtitle">
-          Pick {squadSize} players within £{budget} · Captain earns 2× · Vice-captain earns 1.5×
+          Pick {squadSize} players within £{budget}m · Captain earns 2× · Vice-captain earns 1.5×
         </p>
       </div>
 
-      {/* Mobile tab toggle */}
+      {/* Mobile tabs */}
       <div className="admin-tabs" style={{ marginBottom: "16px" }}>
-        <button
-          className={`admin-tab ${mobileTab === "market" ? "active" : ""}`}
-          onClick={() => setMobileTab("market")}
-        >
-          Marketplace ({allPlayers.length})
+        <button className={`admin-tab ${mobileTab === "market" ? "active" : ""}`} onClick={() => setMobileTab("market")}>
+          Players ({allPlayers.length})
         </button>
-        <button
-          className={`admin-tab ${mobileTab === "squad" ? "active" : ""}`}
-          onClick={() => setMobileTab("squad")}
-        >
+        <button className={`admin-tab ${mobileTab === "squad" ? "active" : ""}`} onClick={() => setMobileTab("squad")}>
           My Squad ({selectedIds.length}/{squadSize})
         </button>
       </div>
