@@ -78,6 +78,12 @@
   }
 }
 
+/* ─── Custom utilities not in Tailwind core ─────────────────────────────── */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
 /* ─── BGO Design Tokens ──────────────────────────────────────────────────────
    4-surface depth model. All values in HSL so Tailwind opacity modifiers work.
    ─────────────────────────────────────────────────────────────────────────── */
