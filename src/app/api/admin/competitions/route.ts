@@ -4,6 +4,17 @@ import { z } from "zod";
 import { handleApiError, json, parseJson, requireAdminUser } from "@/server/api/http";
 import { platformRepository } from "@/server/repositories/platform";
 
+export async function GET() {
+  try {
+    await requireAdminUser();
+    const repo = platformRepository();
+    const competitions = await repo.competitions.list();
+    return json({ competitions });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
 const schema = z.object({
   name: z.string().min(2),
   slug: z

@@ -12,6 +12,7 @@ import { platformRepository } from "@/server/repositories/platform";
 
 const schema = z.object({
   name: z.string().min(2).optional(),
+  slug: z.string().min(2).regex(/^[a-z0-9-]+$/).optional(),
   registrationOpen: z.boolean().optional(),
   lockDeadline: z.coerce.date().nullable().optional(),
   status: z.enum(["draft", "active", "completed", "archived"]).optional(),
@@ -35,6 +36,7 @@ export async function PUT(
     const updated = await repo.competitions.upsert({
       ...competition,
       ...(input.name !== undefined && { name: input.name }),
+      ...(input.slug !== undefined && { slug: input.slug }),
       ...(input.registrationOpen !== undefined && { registrationOpen: input.registrationOpen }),
       ...(input.lockDeadline !== undefined && { lockDeadline: input.lockDeadline }),
       ...(input.status !== undefined && { status: input.status }),
