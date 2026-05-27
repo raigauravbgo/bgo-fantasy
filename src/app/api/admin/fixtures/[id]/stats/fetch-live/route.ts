@@ -46,9 +46,16 @@ async function afFetch<T>(path: string, apiKey: string): Promise<T> {
     headers: { "x-apisports-key": apiKey }
   });
   if (!res.ok) throw new RequestError(`API-Football: ${res.status} ${await res.text()}`, 502);
-  const data = await res.json() as { response: T; errors: unknown[] };
-  if (Array.isArray(data.errors) && data.errors.length > 0) {
+  const data = await res.json() as { response: T; errors: unknown };
+  // API-Football returns errors as either an array or a non-empty object
+  const hasErrors =
+    (Array.isArray(data.errors) && data.errors.length > 0) ||
+    (data.errors !== null && typeof data.errors === "object" && !Array.isArray(data.errors) && Object.keys(data.errors as object).length > 0);
+  if (hasErrors) {
     throw new RequestError(`API-Football error: ${JSON.stringify(data.errors)}`, 502);
+  }
+  if (data.response === undefined) {
+    throw new RequestError(`API-Football returned unexpected response for ${path}`, 502);
   }
   return data.response;
 }
