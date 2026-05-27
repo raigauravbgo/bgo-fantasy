@@ -4,7 +4,7 @@ import { calculateFixtureScoring } from "@/server/services/scoring";
 import { getEnv } from "@/config/env";
 import type { SoccerRawStats } from "@/domain/adapters/soccer/stats-schema";
 
-const AF_BASE = "https://v3.api-sports.io";
+const AF_BASE = "https://v3.football.api-sports.io";
 
 // football-data.org league code → API-Football league ID
 const LEAGUE_ID_MAP: Record<string, number> = {
