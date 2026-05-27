@@ -688,7 +688,7 @@ export default function CompetitionAdminPage() {
           <div className="card">
             <div className="card-title">Import Stats from CSV</div>
             <p style={{ fontSize: "0.875rem", marginBottom: "14px" }}>
-              Upload a CSV with columns: <code>name</code>, <code>goals</code>, <code>assists</code>, <code>minutesPlayed</code>, <code>cleanSheet</code>, <code>saves</code>, <code>yellowCards</code>, <code>redCards</code>.
+              Select a fixture, download the pre-filled template, fill in stats from FBref/SofaScore, then re-upload.
             </p>
             <div style={{ display: "grid", gap: "14px" }}>
               <div className="form-group">
@@ -703,8 +703,23 @@ export default function CompetitionAdminPage() {
                   })()}
                 </select>
               </div>
+              <div>
+                <button
+                  className="btn btn-secondary"
+                  disabled={!(csvFixtureId || selectedFixtureId)}
+                  onClick={() => {
+                    const fid = csvFixtureId || selectedFixtureId;
+                    if (fid) window.open(`/api/admin/fixtures/${fid}/stats/template`, "_blank");
+                  }}
+                >
+                  Download player template
+                </button>
+                <span style={{ fontSize: "0.8rem", color: "var(--muted)", marginLeft: "10px" }}>
+                  Opens a CSV pre-filled with player names for both teams
+                </span>
+              </div>
               <div className="form-group">
-                <label className="form-label">CSV file</label>
+                <label className="form-label">Filled CSV file</label>
                 <input className="form-input" type="file" accept=".csv,text/csv" onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)} style={{ cursor: "pointer" }} />
               </div>
               <div><button className="btn" onClick={importStatsCsv} disabled={!csvFile}>Import CSV stats</button></div>
