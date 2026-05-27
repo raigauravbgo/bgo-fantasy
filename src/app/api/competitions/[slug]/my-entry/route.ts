@@ -54,6 +54,7 @@ export async function POST(
     const constraints = {
       ...soccerAdapter.squadConstraints,
       budget: competition.settings.budget ?? soccerAdapter.squadConstraints.budget,
+      squadSize: competition.settings.squadSize ?? soccerAdapter.squadConstraints.squadSize,
       maxPlayersPerTeam:
         competition.settings.maxPlayersPerTeam ??
         soccerAdapter.squadConstraints.maxPlayersPerTeam

@@ -8,14 +8,14 @@ export const SOCCER_POSITIONS = [
 ] as const;
 
 export const DEFAULT_SOCCER_SQUAD_CONSTRAINTS: SquadConstraint = {
-  squadSize: 11,
+  squadSize: 15,
   budget: 100,
   maxPlayersPerTeam: 3,
   positionLimits: {
-    GK: { min: 1, max: 1 },
-    DEF: { min: 3, max: 5 },
-    MID: { min: 3, max: 5 },
-    FWD: { min: 1, max: 3 }
+    GK:  { min: 2, max: 2 },
+    DEF: { min: 5, max: 5 },
+    MID: { min: 5, max: 5 },
+    FWD: { min: 3, max: 3 }
   }
 };
 
