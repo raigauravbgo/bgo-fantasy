@@ -113,6 +113,7 @@ export async function POST(
     const season = new Date(fixture.startTime).getUTCFullYear();
 
     const allAfFixtures: AfFixture[] = [];
+    const queryErrors: string[] = [];
     for (const d of datesToTry) {
       try {
         const dayFixtures = await afFetch<AfFixture[]>(`/fixtures?league=${leagueId}&season=${season}&date=${d}`, apiKey);
@@ -121,9 +122,14 @@ export async function POST(
             allAfFixtures.push(f);
           }
         }
-      } catch {
-        // If one date is outside free-plan window, skip it
+      } catch (err) {
+        queryErrors.push(`${d}: ${err instanceof Error ? err.message : String(err)}`);
       }
+    }
+
+    // If all date queries failed, surface the actual API errors
+    if (allAfFixtures.length === 0 && queryErrors.length === datesToTry.length) {
+      throw new RequestError(`API-Football returned no fixtures for league ${leagueId} season ${season}. Errors: ${queryErrors.join(" | ")}`, 502);
     }
 
     // Match by team name similarity
