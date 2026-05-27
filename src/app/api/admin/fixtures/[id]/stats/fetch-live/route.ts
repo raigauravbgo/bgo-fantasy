@@ -104,18 +104,32 @@ export async function POST(
       400
     );
 
-    // Find the matching API-Football fixture by date + league
-    const date = new Date(fixture.startTime).toISOString().slice(0, 10);
-    const afFixtures = await afFetch<AfFixture[]>(
-      `/fixtures?league=${leagueId}&date=${date}`,
-      apiKey
-    );
+    // Find the matching API-Football fixture by date + league.
+    // Fixtures stored in UTC may fall on a different calendar date locally (e.g. UTC-3 Brazil),
+    // so we query the UTC date AND the next day, then deduplicate by fixture id.
+    const utcDate = new Date(fixture.startTime).toISOString().slice(0, 10);
+    const nextDay = new Date(new Date(fixture.startTime).getTime() + 86_400_000).toISOString().slice(0, 10);
+    const datesToTry = Array.from(new Set([utcDate, nextDay]));
+
+    const allAfFixtures: AfFixture[] = [];
+    for (const d of datesToTry) {
+      try {
+        const dayFixtures = await afFetch<AfFixture[]>(`/fixtures?league=${leagueId}&date=${d}`, apiKey);
+        for (const f of dayFixtures) {
+          if (!allAfFixtures.some((x) => x.fixture.id === f.fixture.id)) {
+            allAfFixtures.push(f);
+          }
+        }
+      } catch {
+        // If one date is outside free-plan window, skip it
+      }
+    }
 
     // Match by team name similarity
     const t1 = (fixture.team1Name ?? "").toLowerCase();
     const t2 = (fixture.team2Name ?? "").toLowerCase();
 
-    const matched = afFixtures.find((af) => {
+    const matched = allAfFixtures.find((af) => {
       const home = af.teams.home.name.toLowerCase();
       const away = af.teams.away.name.toLowerCase();
       return (
@@ -125,9 +139,9 @@ export async function POST(
     });
 
     if (!matched) {
-      const available = afFixtures.map((af) => `${af.teams.home.name} vs ${af.teams.away.name}`).join(", ");
+      const available = allAfFixtures.map((af) => `${af.teams.home.name} vs ${af.teams.away.name}`).join(", ");
       throw new RequestError(
-        `Could not match fixture "${fixture.team1Name} vs ${fixture.team2Name}" on ${date}. Available: ${available || "none"}`,
+        `Could not match fixture "${fixture.team1Name} vs ${fixture.team2Name}" on dates ${datesToTry.join(", ")}. Available: ${available || "none"}`,
         404
       );
     }
