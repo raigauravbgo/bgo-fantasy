@@ -110,11 +110,12 @@ export async function POST(
     const utcDate = new Date(fixture.startTime).toISOString().slice(0, 10);
     const nextDay = new Date(new Date(fixture.startTime).getTime() + 86_400_000).toISOString().slice(0, 10);
     const datesToTry = Array.from(new Set([utcDate, nextDay]));
+    const season = new Date(fixture.startTime).getUTCFullYear();
 
     const allAfFixtures: AfFixture[] = [];
     for (const d of datesToTry) {
       try {
-        const dayFixtures = await afFetch<AfFixture[]>(`/fixtures?league=${leagueId}&date=${d}`, apiKey);
+        const dayFixtures = await afFetch<AfFixture[]>(`/fixtures?league=${leagueId}&season=${season}&date=${d}`, apiKey);
         for (const f of dayFixtures) {
           if (!allAfFixtures.some((x) => x.fixture.id === f.fixture.id)) {
             allAfFixtures.push(f);
