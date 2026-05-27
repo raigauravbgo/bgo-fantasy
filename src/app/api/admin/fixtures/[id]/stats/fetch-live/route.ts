@@ -86,7 +86,7 @@ export async function POST(
     const repo = platformRepository();
     const fixture = await repo.fixtures.findById(fixtureId);
     if (!fixture) throw new RequestError("Fixture not found", 404);
-    if (fixture.status !== "completed") throw new RequestError("Fixture is not completed yet", 400);
+    // Allow upcoming/live fixtures — admin knows the match is done; we'll mark completed after fetching
 
     // Get competition to find league code
     const competition = await repo.competitions.findById(fixture.competitionId);

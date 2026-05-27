@@ -244,6 +244,15 @@ export default function CompetitionAdminPage() {
     });
   }
 
+  async function markFixtureCompleted() {
+    const fixtureId = selectedFixtureId || fixtures[0]?.id;
+    if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
+    await run("Fixture marked as completed", async () => {
+      await apiFetch(`/api/admin/fixtures/${fixtureId}`, { method: "PATCH", body: { status: "completed" } });
+      setFixtures((prev) => prev.map((f) => f.id === fixtureId ? { ...f, status: "completed" } : f));
+    });
+  }
+
   async function openPrediction() {
     const fixtureId = selectedFixtureId || fixtures[0]?.id;
     if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
@@ -648,6 +657,21 @@ export default function CompetitionAdminPage() {
                   );
                 })()}
               </div>
+
+              {(() => {
+                const sel = fixtures.find((f) => f.id === selectedFixtureId);
+                if (sel && sel.status !== "completed") {
+                  return (
+                    <div className="notice notice-error" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                      <span>This fixture is marked <strong>{sel.status}</strong> — mark it completed before fetching stats.</span>
+                      <button className="btn btn-sm" style={{ flexShrink: 0 }} onClick={markFixtureCompleted} disabled={!!running}>
+                        Mark as completed
+                      </button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 <button className="btn-outline" onClick={openPrediction} disabled={!!running}>Open match-winner prediction</button>
