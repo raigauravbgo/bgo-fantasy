@@ -114,6 +114,7 @@ export default function CompetitionAdminPage() {
   const [team2Score, setTeam2Score] = useState(0);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvFixtureId, setCsvFixtureId] = useState("");
+  const [bulkCsvFile, setBulkCsvFile] = useState<File | null>(null);
   const [plImporting, setPlImporting] = useState(false);
   const [plResult, setPlResult] = useState<string | null>(null);
   const [selectedLeague, setSelectedLeague] = useState("PL");
@@ -302,6 +303,26 @@ export default function CompetitionAdminPage() {
       );
       if (result.unmapped?.length) showNotice(`Imported with ${result.unmapped.length} unmapped player(s): ${result.unmapped.join(", ")}`, "err");
       setCsvFile(null);
+    });
+  }
+
+  async function bulkImportStats() {
+    if (!bulkCsvFile) { showNotice("Select a CSV file first.", "err"); return; }
+    const text = await bulkCsvFile.text();
+    await run("Bulk stats imported", async () => {
+      type BulkResult = { fixture: string; mapped: number; unmapped: string[]; score?: { home: number; away: number }; noFixtureMatch: boolean };
+      const result = await apiFetch<{ results: BulkResult[]; totalStats: number }>(
+        `/api/admin/competitions/${competitionId}/stats/bulk-import`,
+        { method: "POST", body: text, headers: { "Content-Type": "text/csv" } }
+      );
+      const noMatch = result.results.filter((r) => r.noFixtureMatch).map((r) => r.fixture);
+      const withUnmapped = result.results.filter((r) => r.unmapped.length > 0);
+      let msg = `Imported ${result.totalStats} player stats across ${result.results.filter((r) => !r.noFixtureMatch).length} fixture(s).`;
+      if (noMatch.length) msg += ` No fixture match for: ${noMatch.join(", ")}.`;
+      if (withUnmapped.length) msg += ` Unmapped players in: ${withUnmapped.map((r) => `${r.fixture} (${r.unmapped.join(", ")})`).join("; ")}.`;
+      showNotice(msg, noMatch.length || withUnmapped.length ? "err" : "ok");
+      setBulkCsvFile(null);
+      void loadOverview();
     });
   }
 
@@ -629,6 +650,20 @@ export default function CompetitionAdminPage() {
       {/* ── Scoring ──────────────────────────────────────────── */}
       {tab === "scoring" && (
         <div className="stack">
+          <div className="card">
+            <div className="card-title">Bulk Import Stats (All Fixtures)</div>
+            <p style={{ fontSize: "0.875rem", marginBottom: "14px" }}>
+              Upload the CSV exported from the <code>scripts/pull-fbref-stats.py</code> script. Stats for all fixtures are imported in one go — fixtures with scores are automatically marked completed. Then publish each fixture individually below.
+            </p>
+            <div style={{ display: "grid", gap: "14px" }}>
+              <div className="form-group">
+                <label className="form-label">Bulk stats CSV</label>
+                <input className="form-input" type="file" accept=".csv,text/csv" onChange={(e) => setBulkCsvFile(e.target.files?.[0] ?? null)} style={{ cursor: "pointer" }} />
+              </div>
+              <div><button className="btn" onClick={bulkImportStats} disabled={!bulkCsvFile || !!running}>{running === "Bulk stats imported" ? "Importing…" : "Import all stats"}</button></div>
+            </div>
+          </div>
+
           <div className="card">
             <div className="card-title">Publish Match Scoring</div>
             <div style={{ display: "grid", gap: "14px" }}>
