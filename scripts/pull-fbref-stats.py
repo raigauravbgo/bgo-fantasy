@@ -1,442 +1,245 @@
-# Requirements: pip install soccerdata pandas
+# Requirements: pip install requests pandas beautifulsoup4 lxml
 # Usage:        python scripts/pull-fbref-stats.py
 # Output:       scripts/bsa-2026-stats.csv
-
-"""
-Pulls Brasileirão Série A 2026 player match stats from FBref via the
-soccerdata library and writes a CSV ready for bulk import into the
-BGO Fantasy Platform.
-
-Output columns (one row per player per match):
-    matchDate, homeTeam, awayTeam, homeScore, awayScore,
-    playerName, team, position, minutesPlayed, started,
-    goals, assists, yellowCards, redCards,
-    saves, cleanSheet, goalsConceded, penaltySaves
-"""
+#
+# Scrapes FBref match report pages for Brasileirão Série A 2026.
+# Sleeps 4 s between requests to respect FBref's crawl rate.
 
 import sys
+import time
+import re
 import os
-import traceback
 
+import requests
 import pandas as pd
+from bs4 import BeautifulSoup
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+BASE = "https://fbref.com"
+SCHEDULE_URL = f"{BASE}/en/comps/24/2026/schedule/2026-Serie-A-Scores-and-Fixtures"
+DELAY = 4  # seconds between page fetches
+OUTPUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bsa-2026-stats.csv")
 
-def flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Flatten MultiIndex columns to a single level using 'Group_Stat' format.
-    If columns are already flat strings, returns df unchanged.
-    """
-    if not isinstance(df.columns, pd.MultiIndex):
-        return df
-
-    new_cols = []
-    for col in df.columns:
-        if isinstance(col, tuple):
-            # Drop empty-string / "Unnamed" parts that FBref sometimes adds
-            parts = [str(c) for c in col if c and "Unnamed" not in str(c)]
-            new_cols.append("_".join(parts) if parts else "_".join(str(c) for c in col))
-        else:
-            new_cols.append(str(col))
-    df.columns = new_cols
-    return df
+SESSION = requests.Session()
+SESSION.headers.update({
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+})
 
 
-def safe_get(row, *candidates, default=0):
-    """
-    Return the value of the first candidate column name found in row,
-    cast to float then to int.  Returns `default` if none found or value
-    is NaN/None.
-    """
-    for name in candidates:
-        if name in row.index:
-            val = row[name]
-            try:
-                if pd.isna(val):
-                    return default
-                return int(float(val))
-            except (TypeError, ValueError):
-                return default
-    return default
+def fetch(url: str) -> BeautifulSoup:
+    resp = SESSION.get(url, timeout=30)
+    resp.raise_for_status()
+    return BeautifulSoup(resp.text, "lxml")
 
 
-def print_available_columns(df: pd.DataFrame, label: str) -> None:
-    print(f"\n[DEBUG] Available columns in '{label}' DataFrame:")
-    for col in df.columns:
-        print(f"    {col!r}")
-    if hasattr(df.index, 'names'):
-        print(f"    Index levels: {list(df.index.names)}")
-
-
-# ---------------------------------------------------------------------------
-# Column-name candidates (FBref column names vary slightly by season/scrape)
-# ---------------------------------------------------------------------------
-
-# Standard stats
-GOALS_COLS       = ["Performance_Gls", "Gls", "goals", "Goals"]
-ASSISTS_COLS     = ["Performance_Ast", "Ast", "assists", "Assists"]
-YELLOW_COLS      = ["Performance_CrdY", "CrdY", "yellow_cards", "YellowCards"]
-RED_COLS         = ["Performance_CrdR", "CrdR", "red_cards", "RedCards"]
-MINUTES_COLS     = ["Min", "minutes", "Minutes", "Playing Time_Min"]
-POSITION_COLS    = ["Pos", "position", "Position"]
-STARTED_COLS     = ["Started", "started", "GS"]   # GS = "Games Started" on FBref
-
-# Keeper stats
-SAVES_COLS         = ["Performance_Saves", "Saves", "saves", "SV"]
-CLEAN_SHEET_COLS   = ["Performance_CS", "CS", "clean_sheets", "CleanSheets"]
-GA_COLS            = ["Performance_GA", "GA", "goals_against", "GoalsAgainst"]
-PKS_COLS           = ["Penalty Kicks_PKsv", "PKsv", "penalty_saves", "PKSaves",
-                      "Penalty Kicks_PKSaves", "pk_saves"]
-
-
-# ---------------------------------------------------------------------------
-# Core logic
-# ---------------------------------------------------------------------------
-
-def fetch_standard_stats(fbref) -> pd.DataFrame:
-    print("[1/4] Fetching standard player match stats (goals, assists, cards, minutes)…")
+def parse_score(score_str: str):
+    """'2–1' or '2-1' → (2, 1). Returns (None, None) on failure."""
     try:
-        df = fbref.read_player_match_stats(stat_type="summary")
+        s = str(score_str).replace("–", "-").replace("—", "-").strip()
+        parts = re.split(r"[-–]", s)
+        return int(parts[0].strip()), int(parts[1].strip())
     except Exception:
-        # Some versions spell it "standard"
-        print("      'summary' failed, trying stat_type='standard'…")
-        df = fbref.read_player_match_stats(stat_type="standard")
-
-    df = flatten_columns(df)
-    df = df.reset_index()
-    print_available_columns(df, "standard stats (after flatten + reset_index)")
-    print(f"      Rows fetched: {len(df):,}")
-    return df
+        return None, None
 
 
-def fetch_keeper_stats(fbref) -> pd.DataFrame:
-    print("[2/4] Fetching keeper match stats (saves, clean sheets, GA, PKsv)…")
-    try:
-        df = fbref.read_player_match_stats(stat_type="keepers")
-    except Exception:
-        print("      'keepers' failed, trying stat_type='keeper'…")
-        df = fbref.read_player_match_stats(stat_type="keeper")
+def get_schedule() -> list[dict]:
+    """Return list of completed matches with date, teams, score, report URL."""
+    print(f"Fetching schedule from {SCHEDULE_URL} …")
+    soup = fetch(SCHEDULE_URL)
 
-    df = flatten_columns(df)
-    df = df.reset_index()
-    print_available_columns(df, "keeper stats (after flatten + reset_index)")
-    print(f"      Rows fetched: {len(df):,}")
-    return df
+    table = soup.find("table", {"id": re.compile(r"sched_")})
+    if not table:
+        raise RuntimeError("Could not find schedule table on FBref page.")
 
+    matches = []
+    for row in table.find("tbody").find_all("tr"):
+        if row.get("class") and "spacer" in " ".join(row.get("class")):
+            continue
 
-def fetch_schedule(fbref) -> pd.DataFrame:
-    print("[3/4] Fetching match schedule (dates, home/away teams, scores)…")
-    sched = fbref.read_schedule()
-    sched = flatten_columns(sched)
-    sched = sched.reset_index()
-    print_available_columns(sched, "schedule")
-    print(f"      Fixtures found: {len(sched):,}")
-    return sched
+        cells = {td.get("data-stat"): td for td in row.find_all(["td", "th"])}
+        if not cells:
+            continue
 
+        score_cell = cells.get("score")
+        if not score_cell or not score_cell.get_text(strip=True):
+            continue  # not yet played
 
-def resolve_player_col(df: pd.DataFrame) -> str:
-    """Return the player-name column in df (could be in index or columns)."""
-    for candidate in ["player", "Player", "name", "Name"]:
-        if candidate in df.columns:
-            return candidate
-    raise KeyError(
-        f"Cannot find a player-name column. Available: {list(df.columns)}"
-    )
+        report_link = score_cell.find("a", href=True)
+        if not report_link:
+            continue
 
+        date_cell = cells.get("date")
+        date_str = date_cell.get_text(strip=True) if date_cell else ""
 
-def resolve_game_col(df: pd.DataFrame) -> str:
-    for candidate in ["game", "game_id", "match_id", "fixture"]:
-        if candidate in df.columns:
-            return candidate
-    raise KeyError(
-        f"Cannot find a game/match identifier column. Available: {list(df.columns)}"
-    )
+        home_cell = cells.get("home_team") or cells.get("squad_a")
+        away_cell = cells.get("away_team") or cells.get("squad_b")
+        home_name = home_cell.get_text(strip=True) if home_cell else ""
+        away_name = away_cell.get_text(strip=True) if away_cell else ""
 
+        score_text = score_cell.get_text(strip=True)
+        home_score, away_score = parse_score(score_text)
 
-def build_output(std: pd.DataFrame, keeper: pd.DataFrame, sched: pd.DataFrame) -> pd.DataFrame:
-    print("[4/4] Merging and building output CSV…")
-
-    # ------------------------------------------------------------------
-    # 1.  Normalise player column name so we have a consistent join key
-    # ------------------------------------------------------------------
-    player_col_std    = resolve_player_col(std)
-    player_col_keeper = resolve_player_col(keeper)
-    game_col_std      = resolve_game_col(std)
-    game_col_keeper   = resolve_game_col(keeper)
-
-    std   = std.rename(columns={player_col_std:    "player",  game_col_std:    "game_key"})
-    keeper= keeper.rename(columns={player_col_keeper: "player", game_col_keeper: "game_key"})
-
-    # ------------------------------------------------------------------
-    # 2.  Normalise team column so both frames have "team"
-    # ------------------------------------------------------------------
-    for df, label in [(std, "std"), (keeper, "keeper")]:
-        if "team" not in df.columns:
-            for c in ["Team", "squad", "Squad", "club"]:
-                if c in df.columns:
-                    df.rename(columns={c: "team"}, inplace=True)
-                    break
-
-    # ------------------------------------------------------------------
-    # 3.  Merge keeper stats onto standard stats
-    #     Join on (game_key, player) — use left join so non-GK rows are kept
-    # ------------------------------------------------------------------
-    keeper_keep_cols = ["game_key", "player"]
-    for col_group, default_name in [
-        (SAVES_COLS,       "saves"),
-        (CLEAN_SHEET_COLS, "cs_raw"),
-        (GA_COLS,          "goals_against"),
-        (PKS_COLS,         "penalty_saves"),
-    ]:
-        found = next((c for c in col_group if c in keeper.columns), None)
-        if found:
-            keeper_keep_cols.append(found)
-            if found != default_name:
-                keeper = keeper.rename(columns={found: default_name})
-                keeper_keep_cols[-1] = default_name
-
-    keeper_slim = keeper[keeper_keep_cols].copy()
-
-    merged = std.merge(keeper_slim, on=["game_key", "player"], how="left")
-
-    # ------------------------------------------------------------------
-    # 4.  Attach schedule data (date, home_team, away_team, scores)
-    # ------------------------------------------------------------------
-    # Identify the schedule game key
-    sched_game_col = resolve_game_col(sched)
-    sched = sched.rename(columns={sched_game_col: "game_key"})
-
-    # Identify score columns (FBref schedule: home_score / away_score or
-    # home_xg / away_xg depending on version; scores live in "Score" too)
-    score_cols = []
-    for c in sched.columns:
-        cl = c.lower()
-        if "home_score" in cl or "away_score" in cl or c == "Score":
-            score_cols.append(c)
-
-    sched_keep = ["game_key"]
-    for candidate in ["home_team", "away_team", "date"]:
-        if candidate in sched.columns:
-            sched_keep.append(candidate)
-        else:
-            # fuzzy match
-            match = next(
-                (c for c in sched.columns if candidate.replace("_", "") in c.lower().replace("_", "")),
-                None
-            )
-            if match:
-                sched = sched.rename(columns={match: candidate})
-                sched_keep.append(candidate)
-
-    # Parse score from "X–Y" string column if individual columns not present
-    if "Score" in sched.columns and "home_score" not in sched.columns:
-        def parse_score(s):
-            try:
-                parts = str(s).replace("–", "-").split("-")
-                return int(parts[0].strip()), int(parts[1].strip())
-            except Exception:
-                return None, None
-        sched[["home_score", "away_score"]] = sched["Score"].apply(
-            lambda s: pd.Series(parse_score(s))
-        )
-        sched_keep += ["home_score", "away_score"]
-    else:
-        for c in ["home_score", "away_score"]:
-            if c in sched.columns:
-                sched_keep.append(c)
-
-    sched_slim = sched[list(dict.fromkeys(sched_keep))].drop_duplicates("game_key")
-    merged = merged.merge(sched_slim, on="game_key", how="left")
-
-    # ------------------------------------------------------------------
-    # 5.  Derive cleanSheet for ALL players (not just keepers)
-    #     A player's clean sheet = their team conceded 0 in the match.
-    #     home team concedes away_score; away team concedes home_score.
-    # ------------------------------------------------------------------
-    # First ensure we have numeric score columns
-    for sc in ["home_score", "away_score"]:
-        if sc in merged.columns:
-            merged[sc] = pd.to_numeric(merged[sc], errors="coerce")
-        else:
-            merged[sc] = pd.NA
-
-    def derive_clean_sheet(row):
-        team      = str(row.get("team", "")).strip().lower()
-        home_team = str(row.get("home_team", "")).strip().lower()
-        hs = row.get("home_score")
-        as_ = row.get("away_score")
-        try:
-            if team == home_team:
-                return int(float(as_) == 0)
-            else:
-                return int(float(hs) == 0)
-        except (TypeError, ValueError):
-            return 0
-
-    # Use keeper-sourced cs_raw if available, else derive from score
-    if "cs_raw" in merged.columns:
-        merged["cleanSheet"] = merged.apply(
-            lambda row: (
-                int(float(row["cs_raw"])) if pd.notna(row.get("cs_raw"))
-                else derive_clean_sheet(row)
-            ),
-            axis=1,
-        )
-    else:
-        merged["cleanSheet"] = merged.apply(derive_clean_sheet, axis=1)
-
-    # ------------------------------------------------------------------
-    # 6.  Map all output columns
-    # ------------------------------------------------------------------
-    rows = []
-    unmapped = 0
-
-    for _, row in merged.iterrows():
-        # date
-        raw_date = row.get("date", pd.NaT)
-        try:
-            match_date = pd.to_datetime(raw_date).strftime("%Y-%m-%d")
-        except Exception:
-            match_date = ""
-            unmapped += 1
-
-        rows.append({
-            "matchDate":      match_date,
-            "homeTeam":       row.get("home_team", ""),
-            "awayTeam":       row.get("away_team", ""),
-            "homeScore":      row.get("home_score", ""),
-            "awayScore":      row.get("away_score", ""),
-            "playerName":     row.get("player", ""),
-            "team":           row.get("team", ""),
-            "position":       next(
-                                  (row[c] for c in POSITION_COLS if c in row.index and pd.notna(row[c])),
-                                  ""
-                              ),
-            "minutesPlayed":  safe_get(row, *MINUTES_COLS),
-            "started":        safe_get(row, *STARTED_COLS),
-            "goals":          safe_get(row, *GOALS_COLS),
-            "assists":        safe_get(row, *ASSISTS_COLS),
-            "yellowCards":    safe_get(row, *YELLOW_COLS),
-            "redCards":       safe_get(row, *RED_COLS),
-            "saves":          safe_get(row, *SAVES_COLS, "saves"),
-            "cleanSheet":     int(row.get("cleanSheet", 0) or 0),
-            "goalsConceded":  safe_get(row, *GA_COLS, "goals_against"),
-            "penaltySaves":   safe_get(row, *PKS_COLS, "penalty_saves"),
+        matches.append({
+            "date": date_str,
+            "home": home_name,
+            "away": away_name,
+            "home_score": home_score,
+            "away_score": away_score,
+            "report_url": BASE + report_link["href"],
         })
 
-    out = pd.DataFrame(rows, columns=[
+    print(f"  Found {len(matches)} completed fixtures.")
+    return matches
+
+
+def parse_match_stats(soup: BeautifulSoup, match: dict) -> list[dict]:
+    """Extract per-player stats from a match report page."""
+    rows = []
+
+    # FBref match pages have tables with id pattern: stats_TEAMID_summary / stats_TEAMID_keeper
+    summary_tables = soup.find_all("table", {"id": re.compile(r"stats_.+_summary")})
+    keeper_tables  = soup.find_all("table", {"id": re.compile(r"stats_.+_keeper")})
+
+    # Build keeper lookup keyed by player name → {saves, cs, ga, pk_saves}
+    keeper_lookup: dict[str, dict] = {}
+    for ktable in keeper_tables:
+        for kr in ktable.find("tbody").find_all("tr"):
+            if kr.get("class") and "spacer" in " ".join(kr.get("class") or []):
+                continue
+            kc = {td.get("data-stat"): td.get_text(strip=True) for td in kr.find_all(["td", "th"])}
+            pname = kc.get("player", "").strip()
+            if not pname or pname.lower() in ("player", ""):
+                continue
+            keeper_lookup[pname.lower()] = {
+                "saves":         _int(kc.get("gk_saves")),
+                "cleanSheet":    _int(kc.get("gk_clean_sheets")) > 0,
+                "goalsConceded": _int(kc.get("gk_goals_against_gk") or kc.get("gk_goals_against")),
+                "penaltySaves":  _int(kc.get("gk_pens_saved")),
+            }
+
+    for i, table in enumerate(summary_tables):
+        # Team name: try caption or table id
+        team_name = ""
+        caption = table.find("caption")
+        if caption:
+            team_name = caption.get_text(strip=True).replace(" Player Stats Table", "").strip()
+
+        is_home = (i == 0)  # first summary table = home team
+
+        for tr in table.find("tbody").find_all("tr"):
+            cls = " ".join(tr.get("class") or [])
+            if "spacer" in cls or "thead" in cls:
+                continue
+
+            c = {td.get("data-stat"): td.get_text(strip=True) for td in tr.find_all(["td", "th"])}
+            pname = c.get("player", "").strip()
+            if not pname or pname.lower() in ("player", ""):
+                continue
+
+            minutes_raw = c.get("minutes") or c.get("min") or "0"
+            minutes = _int(re.sub(r"[^\d]", "", minutes_raw))
+            if minutes == 0:
+                continue  # did not play
+
+            # starter: FBref marks substitute rows differently — check "game_started"
+            started_raw = c.get("game_started") or c.get("started") or ""
+            started = 1 if started_raw in ("1", "Y", "Yes", "*") else 0
+            if not started_raw:
+                # fallback: if minutes >= 45 assume started
+                started = 1 if minutes >= 45 else 0
+
+            clean_sheet_for_team = (match["away_score"] == 0) if is_home else (match["home_score"] == 0)
+
+            kstat = keeper_lookup.get(pname.lower(), {})
+
+            rows.append({
+                "matchDate":    match["date"],
+                "homeTeam":     match["home"],
+                "awayTeam":     match["away"],
+                "homeScore":    match["home_score"] if match["home_score"] is not None else "",
+                "awayScore":    match["away_score"] if match["away_score"] is not None else "",
+                "playerName":   pname,
+                "team":         team_name,
+                "position":     c.get("position") or c.get("pos") or "",
+                "minutesPlayed": minutes,
+                "started":      started,
+                "goals":        _int(c.get("goals") or c.get("gls")),
+                "assists":      _int(c.get("assists") or c.get("ast")),
+                "yellowCards":  _int(c.get("cards_yellow") or c.get("crdy")),
+                "redCards":     _int(c.get("cards_red") or c.get("crdr")),
+                "saves":        kstat.get("saves", 0),
+                "cleanSheet":   int(kstat.get("cleanSheet", clean_sheet_for_team)),
+                "goalsConceded":kstat.get("goalsConceded", 0),
+                "penaltySaves": kstat.get("penaltySaves", 0),
+            })
+
+    return rows
+
+
+def _int(val) -> int:
+    try:
+        return int(float(str(val).strip() or "0"))
+    except (ValueError, TypeError):
+        return 0
+
+
+def main():
+    print("=" * 60)
+    print("BGO Fantasy — FBref Brasileirão 2026 Stat Puller (direct)")
+    print("=" * 60)
+
+    try:
+        matches = get_schedule()
+    except Exception as exc:
+        print(f"\nERROR fetching schedule: {exc}")
+        sys.exit(1)
+
+    if not matches:
+        print("No completed matches found. Nothing to do.")
+        sys.exit(0)
+
+    all_rows: list[dict] = []
+    failed: list[str] = []
+
+    for idx, match in enumerate(matches, 1):
+        label = f"{match['home']} vs {match['away']} ({match['date']})"
+        print(f"[{idx:3d}/{len(matches)}] {label} …", end=" ", flush=True)
+
+        try:
+            time.sleep(DELAY)
+            soup = fetch(match["report_url"])
+            rows = parse_match_stats(soup, match)
+            all_rows.extend(rows)
+            print(f"{len(rows)} players")
+        except Exception as exc:
+            print(f"FAILED ({exc})")
+            failed.append(label)
+
+    if not all_rows:
+        print("\nERROR: No player stats extracted.")
+        print("FBref may not have detailed match reports for BSA 2026 yet.")
+        sys.exit(1)
+
+    df = pd.DataFrame(all_rows, columns=[
         "matchDate", "homeTeam", "awayTeam", "homeScore", "awayScore",
         "playerName", "team", "position", "minutesPlayed", "started",
         "goals", "assists", "yellowCards", "redCards",
         "saves", "cleanSheet", "goalsConceded", "penaltySaves",
     ])
+    df.to_csv(OUTPUT, index=False, encoding="utf-8")
 
-    return out, unmapped
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-def main():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    output_path = os.path.join(script_dir, "bsa-2026-stats.csv")
-
+    print(f"\nOutput: {OUTPUT}")
     print("=" * 60)
-    print("BGO Fantasy Platform — FBref Brasileirão 2026 Stat Puller")
+    print(f"  Total player-match rows : {len(df):,}")
+    print(f"  Unique fixtures         : {df[['homeTeam','awayTeam','matchDate']].drop_duplicates().shape[0]:,}")
+    if failed:
+        print(f"  Failed fixtures ({len(failed)})  : {'; '.join(failed[:5])}" + (" …" if len(failed) > 5 else ""))
     print("=" * 60)
-
-    # ------------------------------------------------------------------
-    # Import soccerdata (friendly error if not installed)
-    # ------------------------------------------------------------------
-    try:
-        import soccerdata
-    except ImportError:
-        print("\nERROR: 'soccerdata' is not installed.")
-        print("       Run:  pip install soccerdata pandas")
-        sys.exit(1)
-
-    # ------------------------------------------------------------------
-    # Instantiate FBref scraper
-    # ------------------------------------------------------------------
-    print("\nInitialising FBref scraper for BRA-Serie A 2026…")
-    try:
-        fbref = soccerdata.FBref(leagues="BRA-Serie A", seasons=2026)
-    except Exception as exc:
-        print(f"\nERROR: Failed to initialise FBref scraper: {exc}")
-        traceback.print_exc()
-        sys.exit(1)
-
-    # ------------------------------------------------------------------
-    # Fetch data
-    # ------------------------------------------------------------------
-    try:
-        std = fetch_standard_stats(fbref)
-    except Exception as exc:
-        print(f"\nERROR: Could not fetch standard player stats: {exc}")
-        print("       This may mean FBref has no 2026 Brasileirão data yet,")
-        print("       or the site is temporarily unavailable. Try again later.")
-        traceback.print_exc()
-        sys.exit(1)
-
-    try:
-        keeper = fetch_keeper_stats(fbref)
-    except Exception as exc:
-        print(f"\nWARNING: Could not fetch keeper stats ({exc}). "
-              "Keeper columns will be empty.")
-        # Build a minimal empty keeper frame so the merge still works
-        keeper = pd.DataFrame(columns=["game_key", "player"])
-
-    try:
-        sched = fetch_schedule(fbref)
-    except Exception as exc:
-        print(f"\nWARNING: Could not fetch schedule ({exc}). "
-              "Date/score columns will be empty.")
-        sched = pd.DataFrame(columns=["game_key", "home_team", "away_team",
-                                       "home_score", "away_score", "date"])
-
-    # ------------------------------------------------------------------
-    # Build output
-    # ------------------------------------------------------------------
-    try:
-        output_df, unmapped = build_output(std, keeper, sched)
-    except Exception as exc:
-        print(f"\nERROR: Failed to build output DataFrame: {exc}")
-        traceback.print_exc()
-        sys.exit(1)
-
-    # ------------------------------------------------------------------
-    # Write CSV
-    # ------------------------------------------------------------------
-    output_df.to_csv(output_path, index=False, encoding="utf-8")
-    print(f"\nOutput written to: {output_path}")
-
-    # ------------------------------------------------------------------
-    # Summary
-    # ------------------------------------------------------------------
-    total_rows     = len(output_df)
-    fixtures_found = output_df[["homeTeam", "awayTeam", "matchDate"]].drop_duplicates().shape[0]
-    missing_dates  = (output_df["matchDate"] == "").sum()
-    missing_player = (output_df["playerName"] == "").sum()
-    missing_team   = (output_df["team"] == "").sum()
-
-    print("\n" + "=" * 60)
-    print("SUMMARY")
-    print("=" * 60)
-    print(f"  Total player-match rows : {total_rows:,}")
-    print(f"  Unique fixtures found   : {fixtures_found:,}")
-    print(f"  Rows with missing date  : {missing_dates:,}")
-    print(f"  Rows with missing player: {missing_player:,}")
-    print(f"  Rows with missing team  : {missing_team:,}")
-    print(f"  Unmapped/parse errors   : {unmapped:,}")
-    print("=" * 60)
-
-    if total_rows == 0:
-        print("\nWARNING: Output CSV is empty — no player stats were found.")
-        print("         FBref may not yet have 2026 Brasileirão match reports.")
-        sys.exit(1)
 
 
 if __name__ == "__main__":
