@@ -313,7 +313,7 @@ export default function CompetitionAdminPage() {
       type BulkResult = { fixture: string; mapped: number; unmapped: string[]; score?: { home: number; away: number }; noFixtureMatch: boolean };
       const result = await apiFetch<{ results: BulkResult[]; totalStats: number }>(
         `/api/admin/competitions/${competitionId}/stats/bulk-import`,
-        { method: "POST", body: text, headers: { "Content-Type": "text/csv" } }
+        { method: "POST", body: { csv: text } }
       );
       const noMatch = result.results.filter((r) => r.noFixtureMatch).map((r) => r.fixture);
       const withUnmapped = result.results.filter((r) => r.unmapped.length > 0);

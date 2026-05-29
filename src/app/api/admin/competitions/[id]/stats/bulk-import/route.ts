@@ -63,6 +63,9 @@ export async function POST(
       const file = form.get("file");
       if (!file || typeof file === "string") throw new RequestError("No file uploaded", 400);
       csvText = await (file as File).text();
+    } else if (contentType.includes("application/json")) {
+      const body = await request.json() as { csv?: string };
+      csvText = body.csv ?? "";
     } else {
       csvText = await request.text();
     }
