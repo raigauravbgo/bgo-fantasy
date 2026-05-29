@@ -116,9 +116,29 @@ export type PlayerPointDetail = {
   };
 };
 
+export type PlayerStatDisplay = {
+  playerId: string;
+  playerName: string;
+  position: string;
+  teamShortName?: string;
+  stats: {
+    minutesPlayed?: number;
+    started?: boolean;
+    goals?: number;
+    assists?: number;
+    yellowCards?: number;
+    redCards?: number;
+    saves?: number;
+    cleanSheet?: boolean;
+    goalsConceded?: number;
+    penaltySaves?: number;
+  };
+};
+
 export type FixtureDetail = {
   fixture: Fixture;
   playerPoints: PlayerPointDetail[];
+  playerStats: PlayerStatDisplay[];
 };
 
 export type DashboardData = {
@@ -129,4 +149,8 @@ export type DashboardData = {
   upcomingFixtures: Fixture[];
   recentFixtures: Fixture[];
   announcements: Announcement[];
+  squadPlayers?: Player[];
+  fixturePoints?: Array<{ fixtureId: string; points: number }>;
+  lastFixture?: Fixture | null;
+  lastMatchPoints?: number | null;
 };

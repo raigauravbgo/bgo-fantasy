@@ -83,6 +83,7 @@ export default function SquadPage() {
   const [posFilter, setPosFilter] = useState<Position | "ALL">("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("pts");
   const [saving, setSaving] = useState(false);
+  const [renameSaving, setRenameSaving] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const [mobileTab, setMobileTab] = useState<"market" | "squad">("market");
 
@@ -167,6 +168,24 @@ export default function SquadPage() {
       if (curr.length >= squadSize) return curr;
       return [...curr, player.id];
     });
+  }
+
+  async function renameTeam() {
+    if (!competition?.slug) return;
+    setRenameSaving(true); setNotice(null);
+    try {
+      await apiFetch(`/api/competitions/${competition.slug}/my-entry`, {
+        method: "PATCH",
+        body: { name: squadName }
+      });
+      const updated = await apiFetch<{ entry: FantasyEntry | null }>(`/api/competitions/${competition.slug}/my-entry`);
+      setEntry(updated.entry);
+      setNotice({ type: "ok", msg: "Team name updated." });
+    } catch (err) {
+      setNotice({ type: "err", msg: err instanceof Error ? err.message : "Rename failed." });
+    } finally {
+      setRenameSaving(false);
+    }
   }
 
   async function saveSquad(lock = false) {
@@ -519,11 +538,20 @@ export default function SquadPage() {
         <input
           className="squad-name-input"
           style={{ flex: 1, minWidth: "120px" }}
-          disabled={!!isLocked}
           placeholder="Team name"
           value={squadName}
           onChange={(e) => setSquadName(e.target.value)}
         />
+        {isLocked && (
+          <button
+            className="btn-outline"
+            style={{ whiteSpace: "nowrap", fontSize: "0.78rem", minHeight: 34, padding: "0 12px" }}
+            disabled={renameSaving}
+            onClick={() => void renameTeam()}
+          >
+            {renameSaving ? "…" : "Rename"}
+          </button>
+        )}
         <div style={{
           background: selectedIds.length === 0 ? "hsl(var(--danger))" : selectedIds.length === squadSize ? "hsl(var(--ok))" : "hsl(var(--warn))",
           color: "#fff", borderRadius: "6px", padding: "4px 10px",

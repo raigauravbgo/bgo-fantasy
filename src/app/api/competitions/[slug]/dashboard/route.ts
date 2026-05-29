@@ -19,6 +19,10 @@ export async function GET(
         repo.announcements.listActive(competition.id)
       ]);
 
+    const squadPlayers = entry?.playerIds?.length
+      ? await repo.players.findMany(entry.playerIds)
+      : [];
+
     const leaderboard = buildLeaderboard({
       entries,
       entryPoints,
@@ -38,6 +42,20 @@ export async function GET(
       ? leaderboard.find((row) => row.entryId === entry.id)?.totalPoints
       : 0;
 
+    const myEntryPoints = entry
+      ? entryPoints.filter((ep) => ep.entryId === entry.id)
+      : [];
+    const fixturePoints = myEntryPoints.map((ep) => ({
+      fixtureId: ep.fixtureId,
+      points: ep.points
+    }));
+
+    const completedFixtures = fixtures.filter((f) => f.status === "completed");
+    const lastFixture = completedFixtures.slice(-1)[0] ?? null;
+    const lastMatchPoints = lastFixture
+      ? (myEntryPoints.find((ep) => ep.fixtureId === lastFixture.id)?.points ?? null)
+      : null;
+
     return json({
       competition,
       entry,
@@ -46,10 +64,12 @@ export async function GET(
       upcomingFixtures: fixtures
         .filter((fixture) => fixture.status === "upcoming")
         .slice(0, 5),
-      recentFixtures: fixtures
-        .filter((fixture) => fixture.status === "completed")
-        .slice(-5),
-      announcements
+      recentFixtures: completedFixtures.slice(-5),
+      announcements,
+      squadPlayers,
+      fixturePoints,
+      lastFixture,
+      lastMatchPoints
     });
   } catch (error) {
     return handleApiError(error);

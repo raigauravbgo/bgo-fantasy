@@ -5,7 +5,9 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useRequireAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import type { FixtureDetail, PointBreakdown } from "@/lib/types";
+import type { FixtureDetail, PlayerStatDisplay, PointBreakdown } from "@/lib/types";
+
+type Tab = "match" | "stats" | "points";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
@@ -45,6 +47,97 @@ function Breakdown({ items }: { items: PointBreakdown[] }) {
   );
 }
 
+function StatCell({ value, label }: { value: number | boolean | undefined; label: string }) {
+  if (value === undefined || value === null || value === false || value === 0) {
+    return <span style={{ color: "hsl(var(--ink-muted))", fontSize: "0.8rem" }}>—</span>;
+  }
+  return (
+    <span title={label} style={{ fontWeight: 700, fontSize: "0.85rem" }}>
+      {typeof value === "boolean" ? "✓" : value}
+    </span>
+  );
+}
+
+function PlayerStatsTable({ playerStats }: { playerStats: PlayerStatDisplay[] }) {
+  const posOrder: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
+  const sorted = [...playerStats].sort(
+    (a, b) => (posOrder[a.position] ?? 4) - (posOrder[b.position] ?? 4)
+  );
+
+  if (sorted.length === 0) {
+    return <p className="card-muted">No match stats available for this fixture.</p>;
+  }
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <table className="lb-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th style={{ textAlign: "center" }}>Min</th>
+            <th style={{ textAlign: "center" }}>G</th>
+            <th style={{ textAlign: "center" }}>A</th>
+            <th style={{ textAlign: "center" }}>YC</th>
+            <th style={{ textAlign: "center" }}>RC</th>
+            <th style={{ textAlign: "center" }}>Sv</th>
+            <th style={{ textAlign: "center" }}>CS</th>
+            <th style={{ textAlign: "center" }}>GA</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((ps) => (
+            <tr key={ps.playerId}>
+              <td>
+                <div style={{ fontWeight: 700, fontSize: "0.85rem" }}>{ps.playerName}</div>
+                <div style={{ display: "flex", gap: 5, marginTop: 2, alignItems: "center" }}>
+                  <span
+                    className={`badge badge-${ps.position.toLowerCase()}`}
+                    style={{ fontSize: "0.65rem" }}
+                  >
+                    {ps.position}
+                  </span>
+                  {ps.teamShortName ? (
+                    <span style={{ fontSize: "0.72rem", color: "hsl(var(--ink-muted))" }}>
+                      {ps.teamShortName}
+                    </span>
+                  ) : null}
+                  {ps.stats.started === false && (
+                    <span style={{ fontSize: "0.65rem", color: "hsl(var(--ink-muted))" }}>Sub</span>
+                  )}
+                </div>
+              </td>
+              <td style={{ textAlign: "center" }}>
+                <StatCell value={ps.stats.minutesPlayed} label="Minutes played" />
+              </td>
+              <td style={{ textAlign: "center" }}>
+                <StatCell value={ps.stats.goals} label="Goals" />
+              </td>
+              <td style={{ textAlign: "center" }}>
+                <StatCell value={ps.stats.assists} label="Assists" />
+              </td>
+              <td style={{ textAlign: "center" }}>
+                <StatCell value={ps.stats.yellowCards} label="Yellow cards" />
+              </td>
+              <td style={{ textAlign: "center" }}>
+                <StatCell value={ps.stats.redCards} label="Red cards" />
+              </td>
+              <td style={{ textAlign: "center" }}>
+                <StatCell value={ps.stats.saves} label="Saves" />
+              </td>
+              <td style={{ textAlign: "center" }}>
+                <StatCell value={ps.stats.cleanSheet} label="Clean sheet" />
+              </td>
+              <td style={{ textAlign: "center" }}>
+                <StatCell value={ps.stats.goalsConceded} label="Goals allowed" />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function FixtureDetailPage() {
   const { competition, loading: authLoading } = useRequireAuth();
   const params = useParams();
@@ -53,6 +146,7 @@ export default function FixtureDetailPage() {
   const [data, setData] = useState<FixtureDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<Tab>("match");
 
   useEffect(() => {
     if (!competition?.slug || !fixtureId) return;
@@ -76,6 +170,8 @@ export default function FixtureDetailPage() {
   }
 
   const fixture = data?.fixture;
+  const hasStats = (data?.playerStats?.length ?? 0) > 0;
+  const hasPoints = (data?.playerPoints?.length ?? 0) > 0;
 
   return (
     <div className="page">
@@ -92,8 +188,8 @@ export default function FixtureDetailPage() {
 
       {fixture ? (
         <>
-          {/* Match header */}
-          <div className="card" style={{ marginBottom: "24px", textAlign: "center" }}>
+          {/* Match header — always visible */}
+          <div className="card" style={{ marginBottom: "20px", textAlign: "center" }}>
             <div
               style={{
                 display: "grid",
@@ -158,62 +254,108 @@ export default function FixtureDetailPage() {
             ) : null}
           </div>
 
-          {/* Player points */}
-          {data && data.playerPoints.length > 0 ? (
+          {/* Tabs — only show when there's something to tab between */}
+          {(hasStats || hasPoints) && (
+            <div className="admin-tabs" style={{ marginBottom: "16px" }}>
+              <button
+                className={`admin-tab ${activeTab === "match" ? "active" : ""}`}
+                onClick={() => setActiveTab("match")}
+              >
+                Match Info
+              </button>
+              {hasStats && (
+                <button
+                  className={`admin-tab ${activeTab === "stats" ? "active" : ""}`}
+                  onClick={() => setActiveTab("stats")}
+                >
+                  Player Stats
+                </button>
+              )}
+              {hasPoints && (
+                <button
+                  className={`admin-tab ${activeTab === "points" ? "active" : ""}`}
+                  onClick={() => setActiveTab("points")}
+                >
+                  Fantasy Points
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Tab: Match Info */}
+          {activeTab === "match" && (
+            <div>
+              {!hasStats && !hasPoints && fixture.status !== "completed" && (
+                <p className="card-muted">
+                  Stats and fantasy points will appear here after the match is completed and scored.
+                </p>
+              )}
+              {!hasStats && !hasPoints && fixture.status === "completed" && (
+                <p className="card-muted">
+                  No stats have been published for this fixture yet.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Tab: Player Stats */}
+          {activeTab === "stats" && hasStats && (
             <>
-              <div className="section-title">Player Points</div>
-              <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-                <table className="lb-table">
-                  <thead>
-                    <tr>
-                      <th>Player</th>
-                      <th>Pos</th>
-                      <th>Country</th>
-                      <th style={{ textAlign: "right" }}>Points</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.playerPoints.map((pp) => (
-                      <tr key={pp.id}>
-                        <td>
-                          <div style={{ fontWeight: 700 }}>{pp.player.name}</div>
-                          {pp.breakdown.length > 0 ? (
-                            <Breakdown items={pp.breakdown} />
-                          ) : null}
-                        </td>
-                        <td>
-                          <span
-                            className={`badge badge-${pp.player.position.toLowerCase()}`}
-                          >
-                            {pp.player.position}
-                          </span>
-                        </td>
-                        <td style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-                          {pp.player.teamShortName ?? "—"}
-                        </td>
-                        <td style={{ textAlign: "right" }}>
-                          <span
-                            className="lb-pts"
-                            style={{ color: pp.points < 0 ? "var(--error)" : undefined }}
-                          >
-                            {pp.points > 0 ? "+" : ""}
-                            {pp.points}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div style={{
+                fontSize: "0.72rem", color: "hsl(var(--ink-muted))", marginBottom: 10,
+                fontWeight: 600, letterSpacing: "0.03em"
+              }}>
+                G = Goals · A = Assists · YC = Yellow cards · RC = Red cards · Sv = Saves · CS = Clean sheet · GA = Goals allowed
               </div>
+              <PlayerStatsTable playerStats={data?.playerStats ?? []} />
             </>
-          ) : fixture.status === "completed" ? (
-            <p className="card-muted">
-              No player points have been published for this fixture yet.
-            </p>
-          ) : (
-            <p className="card-muted">
-              Points will appear here after the match is completed and scored.
-            </p>
+          )}
+
+          {/* Tab: Fantasy Points */}
+          {activeTab === "points" && hasPoints && (
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <table className="lb-table">
+                <thead>
+                  <tr>
+                    <th>Player</th>
+                    <th>Pos</th>
+                    <th>Club</th>
+                    <th style={{ textAlign: "right" }}>Points</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data!.playerPoints.map((pp) => (
+                    <tr key={pp.id}>
+                      <td>
+                        <div style={{ fontWeight: 700 }}>{pp.player.name}</div>
+                        {pp.breakdown.length > 0 ? (
+                          <Breakdown items={pp.breakdown} />
+                        ) : null}
+                      </td>
+                      <td>
+                        <span
+                          className={`badge badge-${pp.player.position.toLowerCase()}`}
+                        >
+                          {pp.player.position}
+                        </span>
+                      </td>
+                      <td style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                        {pp.player.teamShortName ?? "—"}
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span
+                          className="lb-pts"
+                          style={{ color: pp.points < 0 ? "var(--error)" : undefined }}
+                        >
+                          {pp.points > 0 ? "+" : ""}
+                          {pp.points}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       ) : !error ? (

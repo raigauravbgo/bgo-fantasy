@@ -3,11 +3,20 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { TrendUp, Medal, UsersThree, Lock, SoccerBall } from "@phosphor-icons/react";
+import { TrendUp, Medal, Lock, SoccerBall, Trophy } from "@phosphor-icons/react";
 
 import { useRequireAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import type { Announcement, DashboardData, Fixture } from "@/lib/types";
+import type { Announcement, DashboardData, Fixture, Player } from "@/lib/types";
+
+const POS_COLOR: Record<string, string> = {
+  GK: "hsl(var(--pos-gk))", DEF: "hsl(var(--pos-def))",
+  MID: "hsl(var(--pos-mid))", FWD: "hsl(var(--pos-fwd))"
+};
+const POS_BG: Record<string, string> = {
+  GK: "hsl(var(--pos-gk-bg))", DEF: "hsl(var(--pos-def-bg))",
+  MID: "hsl(var(--pos-mid-bg))", FWD: "hsl(var(--pos-fwd-bg))"
+};
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
@@ -19,29 +28,45 @@ function formatDate(iso: string) {
   });
 }
 
-function FixtureItem({ fixture }: { fixture: Fixture }) {
+function FixtureItem({ fixture, pts }: { fixture: Fixture; pts?: number | null }) {
   return (
-    <div className="fixture-row">
-      <div>
-        <div className="fixture-team">{fixture.team1Name ?? "TBC"}</div>
-        <div className="fixture-meta">{formatDate(fixture.startTime)}</div>
-      </div>
-      <div className="fixture-score">
-        {fixture.score != null
-          ? `${fixture.score.team1 ?? 0} – ${fixture.score.team2 ?? 0}`
-          : fixture.status === "upcoming"
-          ? "vs"
-          : "–"}
-      </div>
-      <div>
-        <div className="fixture-team fixture-team-away">
-          {fixture.team2Name ?? "TBC"}
+    <Link
+      href={`/fixtures/${fixture.id}`}
+      style={{ textDecoration: "none", color: "inherit" }}
+    >
+      <div className="fixture-row" style={{ cursor: "pointer" }}>
+        <div>
+          <div className="fixture-team">{fixture.team1Name ?? "TBC"}</div>
+          <div className="fixture-meta">{formatDate(fixture.startTime)}</div>
         </div>
-        <div className="fixture-meta" style={{ textAlign: "right" }}>
-          {fixture.venue ?? ""}
+        <div style={{ textAlign: "center" }}>
+          <div className="fixture-score">
+            {fixture.score != null
+              ? `${fixture.score.team1 ?? 0} – ${fixture.score.team2 ?? 0}`
+              : fixture.status === "upcoming"
+              ? "vs"
+              : "–"}
+          </div>
+          {pts != null && (
+            <div style={{
+              fontSize: "0.72rem", fontWeight: 800,
+              color: pts > 0 ? "hsl(var(--brand))" : "hsl(var(--ink-muted))",
+              marginTop: 3
+            }}>
+              {pts > 0 ? "+" : ""}{pts} pts
+            </div>
+          )}
+        </div>
+        <div>
+          <div className="fixture-team fixture-team-away">
+            {fixture.team2Name ?? "TBC"}
+          </div>
+          <div className="fixture-meta" style={{ textAlign: "right" }}>
+            {fixture.venue ?? ""}
+          </div>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -59,11 +84,110 @@ function AnnouncementItem({ item }: { item: Announcement }) {
   );
 }
 
+function BudgetBar({ used, total }: { used: number; total: number }) {
+  const pct = total > 0 ? Math.min((used / total) * 100, 100) : 0;
+  const remaining = total - used;
+  const overBudget = remaining < 0;
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+        <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "hsl(var(--ink-muted))" }}>Budget</span>
+        <span style={{ fontSize: "0.85rem", fontWeight: 800 }}>
+          <span style={{ color: overBudget ? "hsl(var(--danger))" : "hsl(var(--ink))" }}>
+            £{used.toFixed(1)}m
+          </span>
+          <span style={{ color: "hsl(var(--ink-muted))", fontWeight: 600 }}> / £{total}m</span>
+        </span>
+      </div>
+      <div style={{
+        height: 8, borderRadius: 4,
+        background: "hsl(var(--surface-sunken))",
+        overflow: "hidden"
+      }}>
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          style={{
+            height: "100%",
+            borderRadius: 4,
+            background: overBudget
+              ? "hsl(var(--danger))"
+              : pct > 85
+              ? "hsl(var(--warn))"
+              : "hsl(var(--brand))"
+          }}
+        />
+      </div>
+      <div style={{ fontSize: "0.75rem", color: "hsl(var(--ink-muted))", marginTop: 4 }}>
+        {overBudget
+          ? `£${Math.abs(remaining).toFixed(1)}m over budget`
+          : `£${remaining.toFixed(1)}m remaining`}
+      </div>
+    </div>
+  );
+}
+
+function SquadPlayerRow({ player, isCaptain, isViceCaptain }: { player: Player; isCaptain: boolean; isViceCaptain: boolean }) {
+  return (
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "auto 1fr auto",
+      gap: 8,
+      alignItems: "center",
+      padding: "7px 0",
+      borderBottom: "1px solid hsl(var(--line))"
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{
+          fontSize: "0.6rem", fontWeight: 800, padding: "1px 5px", borderRadius: 3,
+          background: POS_BG[player.position] ?? "hsl(var(--surface-overlay))",
+          color: POS_COLOR[player.position] ?? "hsl(var(--ink-muted))",
+          minWidth: 28, textAlign: "center"
+        }}>
+          {player.position}
+        </span>
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ fontWeight: 700, fontSize: "0.84rem" }}>{player.name}</span>
+          {isCaptain && (
+            <span style={{
+              fontSize: "0.58rem", fontWeight: 900,
+              background: "hsl(var(--accent2))", color: "hsl(var(--accent2-fg))",
+              borderRadius: 3, padding: "1px 4px"
+            }}>C</span>
+          )}
+          {isViceCaptain && (
+            <span style={{
+              fontSize: "0.58rem", fontWeight: 900,
+              background: "hsl(var(--brand))", color: "hsl(var(--brand-fg))",
+              borderRadius: 3, padding: "1px 4px"
+            }}>V</span>
+          )}
+        </div>
+        <div style={{ fontSize: "0.72rem", color: "hsl(var(--ink-muted))" }}>
+          {player.teamShortName ?? "—"} · £{player.price}m
+        </div>
+      </div>
+      <div style={{
+        fontWeight: 800, fontSize: "0.9rem", fontVariantNumeric: "tabular-nums",
+        color: (player.totalPoints ?? 0) > 0 ? "hsl(var(--brand))" : "hsl(var(--ink-muted))"
+      }}>
+        {player.totalPoints ?? 0}
+      </div>
+    </div>
+  );
+}
+
+const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
+
 export default function DashboardPage() {
   const { user, competition, loading: authLoading } = useRequireAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showFullSquad, setShowFullSquad] = useState(false);
 
   useEffect(() => {
     if (competition?.slug) {
@@ -94,6 +218,15 @@ export default function DashboardPage() {
     );
   }
 
+  const budget = competition.settings?.budget ?? 100;
+  const squadSize = competition.settings?.squadSize ?? 15;
+  const squadPlayers = (data?.squadPlayers ?? []).sort(
+    (a, b) => (POS_ORDER[a.position] ?? 4) - (POS_ORDER[b.position] ?? 4)
+  );
+  const fixturePointsMap = new Map(
+    (data?.fixturePoints ?? []).map((fp) => [fp.fixtureId, fp.points])
+  );
+
   return (
     <div className="page">
       <div className="page-header">
@@ -107,12 +240,33 @@ export default function DashboardPage() {
 
       {/* Stat tiles */}
       <div className="stat-tiles">
-        {/* Points */}
+        {/* Rank — prominent */}
         <motion.div
           className="stat-tile"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05, duration: 0.2 }}
+          style={{ borderTop: "3px solid hsl(var(--accent2))", position: "relative", overflow: "hidden" }}
+        >
+          <div style={{ position: "absolute", top: 14, right: 14, color: "hsl(var(--accent2) / 0.25)" }}>
+            <Medal size={32} weight="bold" />
+          </div>
+          <div className="stat-label">Rank</div>
+          <div className="stat-value" style={{
+            color: data?.rank != null && data.rank <= 3 ? "hsl(var(--accent2))" : "hsl(var(--ink))",
+            fontSize: data?.rank != null && data.rank <= 10 ? "2.8rem" : undefined
+          }}>
+            {data?.rank != null ? `#${data.rank}` : "—"}
+          </div>
+          <div className="stat-sub">overall leaderboard</div>
+        </motion.div>
+
+        {/* Points */}
+        <motion.div
+          className="stat-tile"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.2 }}
           style={{ borderTop: "3px solid hsl(var(--brand))", position: "relative", overflow: "hidden" }}
         >
           <div style={{ position: "absolute", top: 14, right: 14, color: "hsl(var(--brand) / 0.25)" }}>
@@ -122,44 +276,14 @@ export default function DashboardPage() {
           <div className="stat-value" style={{ color: "hsl(var(--ink))" }}>
             {data?.totalPoints ?? 0}
           </div>
-          <div className="stat-sub">competition total</div>
-        </motion.div>
-
-        {/* Rank */}
-        <motion.div
-          className="stat-tile"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.2 }}
-          style={{ borderTop: "3px solid hsl(var(--accent2))", position: "relative", overflow: "hidden" }}
-        >
-          <div style={{ position: "absolute", top: 14, right: 14, color: "hsl(var(--accent2) / 0.25)" }}>
-            <Medal size={32} weight="bold" />
-          </div>
-          <div className="stat-label">Rank</div>
-          <div className="stat-value" style={{ color: data?.rank != null && data.rank <= 3 ? "hsl(var(--accent2))" : "hsl(var(--ink))" }}>
-            {data?.rank != null ? `#${data.rank}` : "—"}
-          </div>
-          <div className="stat-sub">overall leaderboard</div>
-        </motion.div>
-
-        {/* Squad */}
-        <motion.div
-          className="stat-tile"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15, duration: 0.2 }}
-          style={{ borderTop: "3px solid hsl(var(--pos-def))", position: "relative", overflow: "hidden" }}
-        >
-          <div style={{ position: "absolute", top: 14, right: 14, color: "hsl(var(--pos-def) / 0.25)" }}>
-            <UsersThree size={32} weight="bold" />
-          </div>
-          <div className="stat-label">Squad</div>
-          <div className="stat-value">
-            {data?.entry ? data.entry.playerIds.length : 0}
-            <span style={{ fontSize: "1rem", fontWeight: 500, color: "hsl(var(--ink-muted))" }}>/11</span>
-          </div>
-          <div className="stat-sub">players selected</div>
+          {data?.lastMatchPoints != null && (
+            <div className="stat-sub" style={{ color: "hsl(var(--brand))" }}>
+              +{data.lastMatchPoints} last match
+            </div>
+          )}
+          {data?.lastMatchPoints == null && (
+            <div className="stat-sub">competition total</div>
+          )}
         </motion.div>
 
         {/* Status */}
@@ -167,7 +291,7 @@ export default function DashboardPage() {
           className="stat-tile"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.2 }}
+          transition={{ delay: 0.15, duration: 0.2 }}
           style={{
             borderTop: `3px solid ${data?.entry?.locked ? "hsl(var(--ok))" : "hsl(var(--warn))"}`,
             position: "relative", overflow: "hidden",
@@ -185,10 +309,25 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="stat-sub">
-            {data?.entry?.locked ? "squad is locked" : "squad not yet locked"}
+            {data?.entry
+              ? `${data.entry.playerIds.length}/${squadSize} players`
+              : "no squad yet"}
           </div>
         </motion.div>
       </div>
+
+      {/* Budget bar — only if entry exists */}
+      {data?.entry && (
+        <motion.div
+          className="card"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.2 }}
+          style={{ marginBottom: 20 }}
+        >
+          <BudgetBar used={data.entry.budgetUsed} total={budget} />
+        </motion.div>
+      )}
 
       {/* Announcements */}
       {data?.announcements && data.announcements.length > 0 ? (
@@ -222,7 +361,6 @@ export default function DashboardPage() {
                   boxShadow: "0 0 40px hsl(var(--brand) / 0.08), 0 1px 0 0 hsl(var(--surface-overlay)) inset",
                 }}
               >
-                {/* Background glow */}
                 <div style={{
                   position: "absolute", inset: 0, pointerEvents: "none",
                   background: "radial-gradient(ellipse 70% 60% at 50% 0%, hsl(var(--brand-muted) / 0.35), transparent)",
@@ -237,7 +375,7 @@ export default function DashboardPage() {
                     Join the competition
                   </div>
                   <p style={{ color: "hsl(var(--ink-muted))", fontSize: "0.875rem", marginBottom: 24, lineHeight: 1.6 }}>
-                    Pick {competition.settings?.squadSize ?? 11} players within the £{competition.settings?.budget ?? 100}m budget,
+                    Pick {squadSize} players within the £{budget}m budget,
                     choose your captain, and lock your squad before the deadline.
                   </p>
                   <Link className="btn" href="/squad" style={{ fontSize: "0.9rem", minHeight: 42, padding: "0 28px" }}>
@@ -261,6 +399,57 @@ export default function DashboardPage() {
             )
           ) : null}
 
+          {/* My Squad player list */}
+          {data?.entry && squadPlayers.length > 0 && (
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div className="section-title" style={{ margin: 0 }}>My Squad</div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ fontSize: "0.78rem", color: "hsl(var(--ink-muted))" }}>
+                    {squadPlayers.length}/{squadSize} · Total pts: {squadPlayers.reduce((s, p) => s + (p.totalPoints ?? 0), 0)}
+                  </span>
+                  <button
+                    className="btn-outline"
+                    style={{ fontSize: "0.72rem", padding: "3px 10px", minHeight: 0 }}
+                    onClick={() => setShowFullSquad((v) => !v)}
+                  >
+                    {showFullSquad ? "Hide" : "Show all"}
+                  </button>
+                </div>
+              </div>
+              <div className="card" style={{ padding: "4px 16px", marginBottom: 20 }}>
+                {(showFullSquad ? squadPlayers : squadPlayers.slice(0, 5)).map((p) => (
+                  <SquadPlayerRow
+                    key={p.id}
+                    player={p}
+                    isCaptain={p.id === data.entry!.captainId}
+                    isViceCaptain={p.id === data.entry!.viceCaptainId}
+                  />
+                ))}
+                {!showFullSquad && squadPlayers.length > 5 && (
+                  <button
+                    onClick={() => setShowFullSquad(true)}
+                    style={{
+                      width: "100%", textAlign: "center", padding: "10px 0",
+                      fontSize: "0.8rem", fontWeight: 700,
+                      color: "hsl(var(--brand))", background: "none", border: "none",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Show {squadPlayers.length - 5} more players
+                  </button>
+                )}
+                {showFullSquad && (
+                  <div style={{ paddingBottom: 8 }}>
+                    <Link href="/squad" className="btn-outline" style={{ display: "block", textAlign: "center", marginTop: 10, fontSize: "0.85rem" }}>
+                      {data.entry.locked ? "View full squad" : "Edit squad"}
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
           {/* Upcoming fixtures */}
           <div className="section-title">Upcoming Fixtures</div>
           {data?.upcomingFixtures && data.upcomingFixtures.length > 0 ? (
@@ -280,7 +469,7 @@ export default function DashboardPage() {
                 Recent Results
               </div>
               {data.recentFixtures.map((f) => (
-                <FixtureItem key={f.id} fixture={f} />
+                <FixtureItem key={f.id} fixture={f} pts={fixturePointsMap.get(f.id)} />
               ))}
             </>
           ) : null}
@@ -288,33 +477,42 @@ export default function DashboardPage() {
 
         {/* Sidebar */}
         <div className="stack">
-          {data?.entry ? (
+          {/* Last match summary */}
+          {data?.lastFixture && data.lastMatchPoints != null && (
+            <div className="card" style={{ borderColor: "hsl(var(--brand) / 0.3)" }}>
+              <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Trophy size={16} weight="bold" style={{ color: "hsl(var(--brand))" }} />
+                Last Match
+              </div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700, marginBottom: 4 }}>
+                {data.lastFixture.team1Name} {data.lastFixture.score?.team1 ?? "–"}–{data.lastFixture.score?.team2 ?? "–"} {data.lastFixture.team2Name}
+              </div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                <span style={{
+                  fontSize: "2rem", fontWeight: 900,
+                  color: data.lastMatchPoints > 0 ? "hsl(var(--brand))" : "hsl(var(--ink-muted))"
+                }}>
+                  {data.lastMatchPoints > 0 ? "+" : ""}{data.lastMatchPoints}
+                </span>
+                <span style={{ fontSize: "0.85rem", color: "hsl(var(--ink-muted))" }}>points</span>
+              </div>
+              <Link
+                href={`/fixtures/${data.lastFixture.id}`}
+                style={{ fontSize: "0.8rem", color: "hsl(var(--brand))", fontWeight: 600 }}
+              >
+                View details →
+              </Link>
+            </div>
+          )}
+
+          {/* My Squad quick card — only if no player list shown above or squad is empty */}
+          {data?.entry && squadPlayers.length === 0 && (
             <div className="card">
               <div className="card-title">My Squad</div>
               <dl style={{ display: "grid", gap: "10px", margin: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <dt style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-                    Squad name
-                  </dt>
-                  <dd style={{ margin: 0, fontWeight: 700 }}>
-                    {data.entry.name}
-                  </dd>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <dt style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-                    Budget used
-                  </dt>
-                  <dd style={{ margin: 0, fontWeight: 700 }}>
-                    {data.entry.budgetUsed}/100
-                  </dd>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <dt style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-                    Players
-                  </dt>
-                  <dd style={{ margin: 0, fontWeight: 700 }}>
-                    {data.entry.playerIds.length}/11
-                  </dd>
+                  <dt style={{ color: "var(--muted)", fontSize: "0.85rem" }}>Squad name</dt>
+                  <dd style={{ margin: 0, fontWeight: 700 }}>{data.entry.name}</dd>
                 </div>
               </dl>
               <hr className="divider" />
@@ -322,7 +520,7 @@ export default function DashboardPage() {
                 {data.entry.locked ? "View squad" : "Edit squad"}
               </Link>
             </div>
-          ) : null}
+          )}
 
           {competition.lockDeadline ? (
             <div className="card">

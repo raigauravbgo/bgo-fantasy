@@ -13,6 +13,11 @@ const schema = z.object({
   viceCaptainId: z.string()
 });
 
+const patchSchema = z.object({
+  name: z.string().min(2).max(50),
+  mascotUrl: z.string().optional()
+});
+
 export async function GET(
   _request: Request,
   context: { params: Promise<{ slug: string }> }
@@ -101,6 +106,41 @@ export async function POST(
     });
 
     return json({ entry, validation });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ slug: string }> }
+) {
+  try {
+    const user = await requireUser();
+    const { slug } = await context.params;
+    const input = await parseJson(request, patchSchema);
+    const { repo, competition } = await resolveCompetition(slug);
+    const existing = await repo.entries.findByUser(competition.id, user.id);
+
+    if (!existing) {
+      throw new RequestError("Entry not found", 404);
+    }
+
+    const entry = await repo.entries.save({
+      competitionId: competition.id,
+      userId: user.id,
+      name: input.name,
+      mascotUrl: input.mascotUrl ?? existing.mascotUrl,
+      playerIds: existing.playerIds,
+      captainId: existing.captainId,
+      viceCaptainId: existing.viceCaptainId,
+      budgetUsed: existing.budgetUsed,
+      locked: existing.locked,
+      lockedAt: existing.lockedAt,
+      transferUsage: existing.transferUsage
+    });
+
+    return json({ entry });
   } catch (error) {
     return handleApiError(error);
   }
