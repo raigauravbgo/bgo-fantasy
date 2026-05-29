@@ -245,6 +245,19 @@ export default function CompetitionAdminPage() {
     });
   }
 
+  async function publishImportedStats() {
+    const fixtureId = selectedFixtureId || fixtures[0]?.id;
+    if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
+    const score = team1Score || team2Score ? { team1: team1Score, team2: team2Score } : undefined;
+    await run("Imported stats published", async () => {
+      await apiFetch(`/api/admin/fixtures/${fixtureId}/stats/publish`, {
+        method: "POST",
+        body: score ? { score } : {}
+      });
+    });
+    void loadOverview();
+  }
+
   async function markFixtureCompleted() {
     const fixtureId = selectedFixtureId || fixtures[0]?.id;
     if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
@@ -710,7 +723,8 @@ export default function CompetitionAdminPage() {
 
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 <button className="btn-outline" onClick={openPrediction} disabled={!!running}>Open match-winner prediction</button>
-                <button className="btn" onClick={fetchLiveStats} disabled={!!running}>{running ? "Running…" : "⚡ Fetch & publish real stats"}</button>
+                <button className="btn" onClick={publishImportedStats} disabled={!!running}>{running ? "Running…" : "✅ Publish imported stats"}</button>
+                <button className="btn-outline" onClick={fetchLiveStats} disabled={!!running}>{running ? "Running…" : "⚡ Fetch & publish real stats"}</button>
                 <button className="btn-outline" onClick={publishScoring} disabled={!!running}>{running ? "Running…" : "Publish dummy scoring (testing)"}</button>
               </div>
               <p className="form-hint">
