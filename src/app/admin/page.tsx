@@ -47,14 +47,37 @@ export default function AdminPage() {
   const [importResult, setImportResult] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [playerUsers, setPlayerUsers] = useState<{ id: string; name: string; employeeId?: string }[]>([]);
+  const [clearingUsers, setClearingUsers] = useState(false);
 
-  useEffect(() => { void load(); void loadEmployeeCount(); }, []);
+  useEffect(() => { void load(); void loadEmployeeCount(); void loadPlayerUsers(); }, []);
 
   async function loadEmployeeCount() {
     try {
       const d = await apiFetch<{ total: number }>("/api/admin/employees/import");
       setEmployeeCount(d.total);
     } catch { /* silent */ }
+  }
+
+  async function loadPlayerUsers() {
+    try {
+      const d = await apiFetch<{ users: { id: string; name: string; employeeId?: string }[] }>("/api/admin/users");
+      setPlayerUsers(d.users);
+    } catch { /* silent */ }
+  }
+
+  async function clearPlayerUsers() {
+    if (!confirm(`Delete all ${playerUsers.length} registered player accounts? They will need to re-register after you upload the new employee roster.`)) return;
+    setClearingUsers(true);
+    try {
+      const d = await apiFetch<{ deleted: number }>("/api/admin/users", { method: "DELETE" });
+      setPlayerUsers([]);
+      setImportResult(`Deleted ${d.deleted} player account${d.deleted !== 1 ? "s" : ""}.`);
+    } catch (err) {
+      setImportResult(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setClearingUsers(false);
+    }
   }
 
   async function handleEmployeeUpload(event: FormEvent<HTMLFormElement>) {
@@ -224,6 +247,28 @@ export default function AdminPage() {
                   {clearingEmployees ? "Clearing…" : "Clear all employees"}
                 </button>
               )}
+            </div>
+          )}
+
+          {playerUsers.length > 0 && (
+            <div style={{ marginTop: "18px", borderTop: "1px solid hsl(var(--line))", paddingTop: "14px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>Registered player accounts ({playerUsers.length})</span>
+                <button
+                  style={{ fontSize: "0.78rem", padding: "4px 12px", background: "none", border: "1px solid hsl(var(--danger))", color: "hsl(var(--danger))", borderRadius: 6, cursor: clearingUsers ? "not-allowed" : "pointer", fontWeight: 700 }}
+                  disabled={clearingUsers}
+                  onClick={() => void clearPlayerUsers()}
+                >
+                  {clearingUsers ? "Deleting…" : "Delete all accounts"}
+                </button>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {playerUsers.map((u) => (
+                  <span key={u.id} style={{ fontSize: "0.78rem", padding: "3px 10px", background: "hsl(var(--surface-sunken))", borderRadius: 6, border: "1px solid hsl(var(--line))" }}>
+                    {u.name} {u.employeeId ? `(${u.employeeId})` : ""}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
         </div>
