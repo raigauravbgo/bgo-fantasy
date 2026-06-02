@@ -9,6 +9,7 @@ import {
   RequestError
 } from "@/server/api/http";
 import { platformRepository } from "@/server/repositories/platform";
+import { prisma } from "@/server/db/prisma";
 
 const schema = z.object({
   name: z.string().min(2).optional(),
@@ -61,6 +62,50 @@ export async function PUT(
     });
 
     return json({ competition: updated });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function DELETE(
+  _request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const admin = await requireAdminUser();
+    const { id } = await context.params;
+    const repo = platformRepository();
+    const competition = await repo.competitions.findById(id);
+    if (!competition) throw new RequestError("Competition not found", 404);
+
+    // Delete in FK-safe order inside a transaction
+    await prisma.$transaction([
+      prisma.predictionResult.deleteMany({ where: { competitionId: id } }),
+      prisma.userPrediction.deleteMany({ where: { competitionId: id } }),
+      prisma.predictionSet.deleteMany({ where: { competitionId: id } }),
+      prisma.entryPoints.deleteMany({ where: { competitionId: id } }),
+      prisma.playerPoints.deleteMany({ where: { competitionId: id } }),
+      prisma.scoringRun.deleteMany({ where: { competitionId: id } }),
+      prisma.rawStat.deleteMany({ where: { competitionId: id } }),
+      prisma.fantasyEntry.deleteMany({ where: { competitionId: id } }),
+      prisma.announcement.deleteMany({ where: { competitionId: id } }),
+      prisma.auditLog.deleteMany({ where: { competitionId: id } }),
+      prisma.fixture.deleteMany({ where: { competitionId: id } }),
+      prisma.player.deleteMany({ where: { competitionId: id } }),
+      prisma.team.deleteMany({ where: { competitionId: id } }),
+      prisma.competition.delete({ where: { id } }),
+    ]);
+
+    await repo.audit.create({
+      actorUserId: admin.id,
+      action: "competition.delete",
+      entityType: "competition",
+      entityId: id,
+      before: competition,
+      after: null
+    });
+
+    return json({ deleted: true });
   } catch (error) {
     return handleApiError(error);
   }

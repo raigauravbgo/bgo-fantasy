@@ -117,6 +117,7 @@ export default function CompetitionAdminPage() {
   const [bulkCsvFile, setBulkCsvFile] = useState<File | null>(null);
   const [plImporting, setPlImporting] = useState(false);
   const [plResult, setPlResult] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [selectedLeague, setSelectedLeague] = useState("PL");
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState(0);
@@ -176,6 +177,19 @@ export default function CompetitionAdminPage() {
       showNotice(err instanceof Error ? err.message : `${label} failed.`, "err");
     } finally {
       setRunning(null);
+    }
+  }
+
+  async function deleteCompetition() {
+    if (!confirm(`Delete "${data?.competition.name}" and ALL its data (teams, players, fixtures, entries, stats)? This cannot be undone.`)) return;
+    if (!confirm("Are you sure? This permanently deletes everything.")) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/admin/competitions/${competitionId}`, { method: "DELETE" });
+      router.push("/admin");
+    } catch (err) {
+      setNotice({ type: "err", msg: err instanceof Error ? err.message : "Delete failed." });
+      setDeleting(false);
     }
   }
 
@@ -600,6 +614,20 @@ export default function CompetitionAdminPage() {
               <button className="btn-outline" onClick={importSampleData} disabled={!!running}>Import sample roster &amp; fixtures</button>
               <button className="btn-outline" onClick={seedSquads} disabled={!!running}>Seed 5 dummy squads</button>
             </div>
+          </div>
+
+          <div className="card" style={{ borderColor: "hsl(var(--danger))" }}>
+            <div className="card-title" style={{ color: "hsl(var(--danger))" }}>Danger Zone</div>
+            <p className="card-muted" style={{ marginBottom: "14px" }}>
+              Permanently deletes this competition and <strong>all</strong> associated data — teams, players, fixtures, entries, stats, and scoring runs. Cannot be undone.
+            </p>
+            <button
+              style={{ background: "hsl(var(--danger))", color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 700, cursor: deleting ? "not-allowed" : "pointer", opacity: deleting ? 0.6 : 1 }}
+              disabled={deleting}
+              onClick={() => void deleteCompetition()}
+            >
+              {deleting ? "Deleting…" : "Delete competition & all data"}
+            </button>
           </div>
         </div>
       )}

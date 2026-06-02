@@ -43,6 +43,7 @@ export default function AdminPage() {
   const [employeeCount, setEmployeeCount] = useState<number | null>(null);
   const [showEmployeeImport, setShowEmployeeImport] = useState(false);
   const [importingEmployees, setImportingEmployees] = useState(false);
+  const [clearingEmployees, setClearingEmployees] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -78,6 +79,21 @@ export default function AdminPage() {
       setImportResult(err instanceof Error ? err.message : "Import failed");
     } finally {
       setImportingEmployees(false);
+    }
+  }
+
+  async function clearEmployees() {
+    if (!confirm(`Delete all ${employeeCount?.toLocaleString() ?? ""} employee records? Users who registered will still be able to log in, but new registrations will fail until you re-upload the roster.`)) return;
+    setClearingEmployees(true);
+    setImportResult(null);
+    try {
+      const d = await apiFetch<{ deleted: number }>("/api/admin/employees/import", { method: "DELETE" });
+      setEmployeeCount(0);
+      setImportResult(`Cleared ${d.deleted.toLocaleString()} employee records.`);
+    } catch (err) {
+      setImportResult(err instanceof Error ? err.message : "Clear failed.");
+    } finally {
+      setClearingEmployees(false);
     }
   }
 
@@ -195,9 +211,20 @@ export default function AdminPage() {
             </button>
           </form>
           {employeeCount !== null && (
-            <p style={{ marginTop: "10px", fontSize: "0.8rem", color: "hsl(var(--ink-muted))" }}>
-              Currently {employeeCount.toLocaleString()} employees in the database.
-            </p>
+            <div style={{ marginTop: "12px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <p style={{ fontSize: "0.8rem", color: "hsl(var(--ink-muted))", margin: 0 }}>
+                Currently {employeeCount.toLocaleString()} employees in the database.
+              </p>
+              {employeeCount > 0 && (
+                <button
+                  style={{ fontSize: "0.78rem", padding: "4px 12px", background: "none", border: "1px solid hsl(var(--danger))", color: "hsl(var(--danger))", borderRadius: 6, cursor: clearingEmployees ? "not-allowed" : "pointer", fontWeight: 700 }}
+                  disabled={clearingEmployees}
+                  onClick={() => void clearEmployees()}
+                >
+                  {clearingEmployees ? "Clearing…" : "Clear all employees"}
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

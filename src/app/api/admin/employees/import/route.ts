@@ -1,5 +1,6 @@
 import { handleApiError, json, requireAdminUser, RequestError } from "@/server/api/http";
 import { employeesRepository } from "@/server/repositories/employees";
+import { prisma } from "@/server/db/prisma";
 import * as XLSX from "xlsx";
 
 // GET: return current count
@@ -111,4 +112,15 @@ function parseDate(v: unknown): string {
   const d = new Date(s);
   if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   return "";
+}
+
+// DELETE: wipe all employee records
+export async function DELETE() {
+  try {
+    await requireAdminUser();
+    const { count } = await prisma.employee.deleteMany();
+    return json({ deleted: count });
+  } catch (error) {
+    return handleApiError(error);
+  }
 }
