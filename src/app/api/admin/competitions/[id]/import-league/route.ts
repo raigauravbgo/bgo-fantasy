@@ -16,6 +16,7 @@ export const SUPPORTED_LEAGUES: Record<string, { name: string; countryCode: stri
   PPL: { name: "Primeira Liga",       countryCode: "PT", season: 2025 },
   ELC: { name: "Championship",        countryCode: "GB", season: 2025 },
   BSA: { name: "Brasileirão",         countryCode: "BR", season: 2026 },
+  WC:  { name: "FIFA World Cup 2026", countryCode: "WC", season: 2026 },
 };
 
 const schema = z.object({
@@ -126,7 +127,8 @@ export async function POST(
       competitionId,
       name: t.name,
       shortName: t.tla,
-      countryCode: league.countryCode
+      // For WC, each team's TLA is its own ISO country code (ARG, BRA, FRA…)
+      countryCode: leagueCode === "WC" ? t.tla : league.countryCode
     }));
     const savedTeams = await repo.teams.upsertMany(teamItems);
     const teamByTla = new Map(savedTeams.map((t) => [t.shortName, t]));

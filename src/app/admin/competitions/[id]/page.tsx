@@ -85,6 +85,7 @@ const LEAGUE_OPTIONS = [
   { value: "PPL", label: "🇵🇹 Primeira Liga (Portugal)" },
   { value: "ELC", label: "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship (England)" },
   { value: "BSA", label: "🇧🇷 Brasileirão (Brazil)" },
+  { value: "WC",  label: "🌍 FIFA World Cup 2026" },
 ];
 
 function fixtureLabel(f: AdminFixture): string {
