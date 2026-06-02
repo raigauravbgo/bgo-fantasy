@@ -43,6 +43,8 @@ export type Fixture = {
   team2Id: string;
   team1Name?: string;
   team2Name?: string;
+  team1ShortName?: string;
+  team2ShortName?: string;
   status: "upcoming" | "live" | "completed" | "postponed" | "cancelled";
   startTime: string;
   venue?: string;

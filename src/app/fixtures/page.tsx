@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { MapPin, CalendarBlank, Trophy } from "@phosphor-icons/react";
@@ -8,202 +8,292 @@ import { useRequireAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import type { Fixture } from "@/lib/types";
 
-const STATUS_ORDER = ["live", "upcoming", "completed", "postponed", "cancelled"];
+// ── Flag helpers ──────────────────────────────────────────────────────────────
 
-function formatDate(iso: string) {
+const TLA_TO_A2: Record<string, string> = {
+  AFG: "AF", ALB: "AL", ALG: "DZ", AND: "AD", ANG: "AO", ARG: "AR",
+  ARM: "AM", AUS: "AU", AUT: "AT", AZE: "AZ", BEL: "BE", BEN: "BJ",
+  BFA: "BF", BGD: "BD", BIH: "BA", BLR: "BY", BOL: "BO", BOS: "BA",
+  BRA: "BR", BUL: "BG", CAM: "KH", CAN: "CA", CHI: "CL", CHN: "CN",
+  CIV: "CI", CMR: "CM", COD: "CD", COG: "CG", COL: "CO", CPV: "CV",
+  CRC: "CR", CRO: "HR", CUB: "CU", CYP: "CY", CZE: "CZ", DEN: "DK",
+  DOM: "DO", ECU: "EC", EGY: "EG", ENG: "GB", ESP: "ES", ETH: "ET",
+  FIN: "FI", FRA: "FR", GAB: "GA", GEO: "GE", GER: "DE", GHA: "GH",
+  GNB: "GW", GRE: "GR", GTM: "GT", GUI: "GN", HON: "HN", HUN: "HU",
+  IDN: "ID", IND: "IN", IRL: "IE", IRN: "IR", IRQ: "IQ", ISL: "IS",
+  ISR: "IL", ITA: "IT", IVC: "CI", JAM: "JM", JAP: "JP", JOR: "JO",
+  KAZ: "KZ", KEN: "KE", KOR: "KR", KSA: "SA", KUW: "KW", LBN: "LB",
+  LIB: "LY", MAD: "MG", MAR: "MA", MAS: "MY", MEX: "MX", MLI: "ML",
+  MON: "ME", MOZ: "MZ", MRT: "MR", MTN: "MT", NCA: "NI", NED: "NL",
+  NGA: "NG", NOR: "NO", NZL: "NZ", OMA: "OM", PAN: "PA", PAR: "PY",
+  PER: "PE", PHI: "PH", POL: "PL", POR: "PT", PRK: "KP", QAT: "QA",
+  ROU: "RO", RSA: "ZA", RUS: "RU", SA: "SA", SAU: "SA", SCO: "GB",
+  SEN: "SN", SLE: "SL", SLO: "SI", SLV: "SV", SOM: "SO", SRB: "RS",
+  SSD: "SS", SUI: "CH", SUR: "SR", SVK: "SK", SVN: "SI", SWE: "SE",
+  SYR: "SY", TAN: "TZ", THA: "TH", TRI: "TT", TUN: "TN", TUR: "TR",
+  UAE: "AE", UGA: "UG", UKR: "UA", URU: "UY", USA: "US", UZB: "UZ",
+  VEN: "VE", VIE: "VN", WAL: "GB", YEM: "YE", ZAM: "ZM", ZIM: "ZW",
+  // 2-letter passthroughs sometimes returned by API
+  US: "US", SK: "KR",
+};
+
+function flagEmoji(tla?: string | null): string {
+  if (!tla) return "🏳️";
+  const a2 = TLA_TO_A2[tla.toUpperCase()] ?? (tla.length === 2 ? tla.toUpperCase() : null);
+  if (!a2) return "🏳️";
+  return (
+    String.fromCodePoint(0x1f1e6 + a2.charCodeAt(0) - 65) +
+    String.fromCodePoint(0x1f1e6 + a2.charCodeAt(1) - 65)
+  );
+}
+
+// ── Date / time helpers ────────────────────────────────────────────────────────
+
+function dateKey(iso: string) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function formatDateHeader(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
-    weekday: "short",
+    weekday: "long",
     day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
+    month: "long",
+    year: "numeric",
   });
 }
 
-/* Derive a 2-3 char abbreviation + deterministic hue from any team name/id */
-function teamAbbr(name: string): string {
-  const words = name.trim().split(/\s+/);
-  if (words.length === 1) return name.slice(0, 3).toUpperCase();
-  return words
-    .filter((w) => !["FC", "SC", "CA", "CR", "EC", "FR", "FBPA"].includes(w.toUpperCase()))
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-const TEAM_HUES: Record<string, number> = {};
-function teamHue(id: string): number {
-  if (TEAM_HUES[id] != null) return TEAM_HUES[id];
-  let h = 0;
-  for (const c of id) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
-  TEAM_HUES[id] = (h % 300) + 10; // avoid pure red collision with danger
-  return TEAM_HUES[id];
-}
+// ── Filters ───────────────────────────────────────────────────────────────────
 
-function TeamChip({ name, id, align = "left" }: { name: string; id?: string; align?: "left" | "right" }) {
-  const abbr = teamAbbr(name ?? "");
-  const hue = teamHue(id ?? name ?? "");
-  const bg = `hsl(${hue} 60% 22%)`;
-  const border = `hsl(${hue} 60% 36%)`;
-  const fg = `hsl(${hue} 80% 80%)`;
+const FILTERS = [
+  { key: "all",       label: "All" },
+  { key: "live",      label: "Live" },
+  { key: "upcoming",  label: "Upcoming" },
+  { key: "completed", label: "Completed" },
+] as const;
+type FilterKey = (typeof FILTERS)[number]["key"];
 
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function TeamBlock({
+  name,
+  shortName,
+  align,
+}: {
+  name: string;
+  shortName?: string | null;
+  align: "left" | "right";
+}) {
+  const flag = flagEmoji(shortName);
+  const isRight = align === "right";
   return (
     <div
       style={{
         display: "flex",
-        alignItems: "center",
-        gap: "10px",
-        flexDirection: align === "right" ? "row-reverse" : "row",
+        flexDirection: "column",
+        alignItems: isRight ? "flex-end" : "flex-start",
+        gap: 7,
+        flex: 1,
+        minWidth: 0,
       }}
     >
-      <div
+      <span
         style={{
-          width: 36,
-          height: 36,
-          borderRadius: "50%",
-          background: bg,
-          border: `1.5px solid ${border}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "0.6rem",
-          fontWeight: 900,
-          color: fg,
-          letterSpacing: "0.04em",
-          flexShrink: 0,
+          fontSize: "2.6rem",
+          lineHeight: 1,
+          filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.45))",
+          userSelect: "none",
         }}
       >
-        {abbr}
-      </div>
+        {flag}
+      </span>
       <span
         style={{
           fontWeight: 700,
-          fontSize: "0.9rem",
-          textAlign: align === "right" ? "right" : "left",
-          lineHeight: 1.2,
+          fontSize: "0.92rem",
+          color: "hsl(var(--ink))",
+          textAlign: isRight ? "right" : "left",
+          lineHeight: 1.25,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          maxWidth: "100%",
         }}
       >
-        {name ?? "TBC"}
+        {name}
       </span>
     </div>
   );
 }
 
-function ScoreChip({ fixture }: { fixture: Fixture }) {
+function MatchCenter({ fixture }: { fixture: Fixture }) {
   const isLive = fixture.status === "live";
-  const isCompleted = fixture.status === "completed";
+  const isDone = fixture.status === "completed";
+  const hasScore = fixture.score != null;
 
   if (isLive) {
     return (
-      <div style={{ textAlign: "center" }}>
+      <div style={{ textAlign: "center", flexShrink: 0, padding: "0 8px" }}>
         <div
           style={{
-            background: "hsl(var(--live-bg))",
-            border: "1px solid hsl(var(--live) / 0.5)",
-            borderRadius: 8,
-            padding: "6px 14px",
-            boxShadow: "0 0 16px hsl(var(--live) / 0.35)",
-            display: "inline-block",
+            fontSize: "2rem",
+            fontWeight: 900,
+            color: "hsl(var(--live))",
+            lineHeight: 1,
+            fontVariantNumeric: "tabular-nums",
+            letterSpacing: "-0.02em",
           }}
         >
-          <div
-            className="live-dot"
+          {hasScore ? `${fixture.score!.team1} – ${fixture.score!.team2}` : "– –"}
+        </div>
+        <div
+          className="live-dot"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            fontSize: "0.62rem",
+            fontWeight: 800,
+            color: "hsl(var(--live))",
+            letterSpacing: "0.09em",
+            textTransform: "uppercase",
+            marginTop: 5,
+          }}
+        >
+          <span
             style={{
-              color: "hsl(var(--live))",
-              fontSize: "0.75rem",
-              fontWeight: 800,
-              letterSpacing: "0.06em",
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "hsl(var(--live))",
+              display: "inline-block",
             }}
-          >
-            LIVE
-          </div>
-          {fixture.score != null && (
-            <div
-              style={{
-                color: "hsl(var(--live))",
-                fontSize: "1.4rem",
-                fontWeight: 900,
-                lineHeight: 1,
-                fontVariantNumeric: "tabular-nums",
-                marginTop: 2,
-              }}
-            >
-              {fixture.score.team1} – {fixture.score.team2}
-            </div>
-          )}
+          />
+          LIVE
         </div>
       </div>
     );
   }
 
-  if (isCompleted && fixture.score != null) {
+  if (isDone && hasScore) {
     return (
-      <div style={{ textAlign: "center" }}>
+      <div style={{ textAlign: "center", flexShrink: 0, padding: "0 8px" }}>
         <div
           style={{
-            background: "hsl(var(--surface-sunken))",
-            border: "1px solid hsl(var(--line-strong))",
-            borderRadius: 8,
-            padding: "6px 18px",
-            display: "inline-block",
+            fontSize: "2rem",
+            fontWeight: 900,
+            color: "hsl(var(--ink))",
+            lineHeight: 1,
+            fontVariantNumeric: "tabular-nums",
+            letterSpacing: "-0.02em",
           }}
         >
-          <div
-            style={{
-              fontSize: "1.5rem",
-              fontWeight: 900,
-              color: "hsl(var(--ink))",
-              fontVariantNumeric: "tabular-nums",
-              letterSpacing: "-0.02em",
-              lineHeight: 1,
-            }}
-          >
-            {fixture.score.team1} – {fixture.score.team2}
-          </div>
-          {fixture.result?.winnerTeamId && (
-            <div
-              style={{
-                fontSize: "0.6rem",
-                fontWeight: 700,
-                color: "hsl(var(--ink-muted))",
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-                marginTop: 3,
-                textAlign: "center",
-              }}
-            >
-              {fixture.result.winnerTeamId === "draw"
-                ? "Draw"
-                : fixture.result.winnerTeamId === fixture.team1Id
-                ? "Home win"
-                : "Away win"}
-            </div>
-          )}
+          {fixture.score!.team1} – {fixture.score!.team2}
+        </div>
+        <div
+          style={{
+            fontSize: "0.62rem",
+            fontWeight: 700,
+            color: "hsl(var(--ink-muted))",
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            marginTop: 5,
+          }}
+        >
+          {fixture.result?.winnerTeamId === "draw"
+            ? "Draw"
+            : fixture.result?.winnerTeamId === fixture.team1Id
+            ? "Home win"
+            : fixture.result?.winnerTeamId
+            ? "Away win"
+            : "FT"}
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ textAlign: "center" }}>
+    <div
+      style={{ textAlign: "center", flexShrink: 0, padding: "0 10px" }}
+    >
       <div
         style={{
-          background: "hsl(var(--surface-overlay))",
-          border: "1px solid hsl(var(--line))",
-          borderRadius: 8,
-          padding: "6px 16px",
-          display: "inline-block",
+          fontSize: "0.95rem",
+          fontWeight: 800,
           color: "hsl(var(--ink-muted))",
-          fontSize: "0.8rem",
-          fontWeight: 700,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
+          letterSpacing: "0.1em",
+          lineHeight: 1,
         }}
       >
-        vs
+        VS
+      </div>
+      <div
+        style={{
+          fontSize: "0.78rem",
+          fontWeight: 600,
+          color: "hsl(var(--ink-secondary))",
+          marginTop: 6,
+          letterSpacing: "0.02em",
+        }}
+      >
+        {formatTime(fixture.startTime)}
       </div>
     </div>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const isLive = status === "live";
+  const isDone = status === "completed";
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        padding: "3px 10px",
+        borderRadius: 20,
+        fontSize: "0.65rem",
+        fontWeight: 800,
+        letterSpacing: "0.07em",
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+        background: isLive
+          ? "hsl(var(--live-bg))"
+          : isDone
+          ? "hsl(220 18% 20%)"
+          : "hsl(220 18% 17%)",
+        color: isLive
+          ? "hsl(var(--live))"
+          : isDone
+          ? "hsl(var(--ink-secondary))"
+          : "hsl(var(--ink-muted))",
+        border: `1px solid ${
+          isLive ? "hsl(var(--live) / 0.35)" : "hsl(var(--line))"
+        }`,
+        boxShadow: isLive ? "0 0 10px hsl(var(--live) / 0.18)" : "none",
+      }}
+    >
+      {isLive && (
+        <span
+          className="live-dot"
+          style={{
+            width: 5,
+            height: 5,
+            borderRadius: "50%",
+            background: "hsl(var(--live))",
+            display: "inline-block",
+            flexShrink: 0,
+          }}
+        />
+      )}
+      {status}
+    </span>
   );
 }
 
@@ -212,56 +302,88 @@ function FixtureCard({ fixture, index }: { fixture: Fixture; index: number }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.18, delay: index * 0.03, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.18, delay: Math.min(index * 0.025, 0.4), ease: [0.16, 1, 0.3, 1] }}
+      style={{ marginBottom: 10 }}
     >
       <Link href={`/fixtures/${fixture.id}`} style={{ display: "block", textDecoration: "none" }}>
         <div
           style={{
             background: "hsl(var(--surface-raised))",
-            border: `1px solid ${isLive ? "hsl(var(--live) / 0.4)" : "hsl(var(--line))"}`,
-            borderRadius: 12,
-            marginBottom: 10,
+            border: `1px solid ${isLive ? "hsl(var(--live) / 0.45)" : "hsl(var(--line))"}`,
+            borderRadius: 14,
             overflow: "hidden",
-            transition: "border-color 140ms ease, transform 140ms cubic-bezier(0.16,1,0.3,1), box-shadow 140ms ease",
+            transition:
+              "transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease",
             boxShadow: isLive
-              ? "0 0 24px hsl(var(--live) / 0.15), 0 1px 0 0 hsl(var(--surface-overlay)) inset"
-              : "0 1px 0 0 hsl(var(--surface-overlay)) inset, 0 4px 12px hsl(220 40% 3% / 0.35)",
+              ? "0 0 32px hsl(var(--live) / 0.14), 0 2px 14px hsl(220 40% 2% / 0.45)"
+              : "0 2px 14px hsl(220 40% 2% / 0.35)",
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)";
-            (e.currentTarget as HTMLDivElement).style.borderColor = isLive
+            const el = e.currentTarget as HTMLDivElement;
+            el.style.transform = "translateY(-2px)";
+            el.style.borderColor = isLive
               ? "hsl(var(--live) / 0.7)"
-              : "hsl(var(--brand) / 0.4)";
-            (e.currentTarget as HTMLDivElement).style.boxShadow = "0 8px 28px hsl(220 40% 3% / 0.5)";
+              : "hsl(var(--brand) / 0.5)";
+            el.style.boxShadow = "0 8px 30px hsl(220 40% 2% / 0.6)";
           }}
           onMouseLeave={(e) => {
-            (e.currentTarget as HTMLDivElement).style.transform = "";
-            (e.currentTarget as HTMLDivElement).style.borderColor = isLive
-              ? "hsl(var(--live) / 0.4)"
+            const el = e.currentTarget as HTMLDivElement;
+            el.style.transform = "";
+            el.style.borderColor = isLive
+              ? "hsl(var(--live) / 0.45)"
               : "hsl(var(--line))";
-            (e.currentTarget as HTMLDivElement).style.boxShadow = isLive
-              ? "0 0 24px hsl(var(--live) / 0.15), 0 1px 0 0 hsl(var(--surface-overlay)) inset"
-              : "0 1px 0 0 hsl(var(--surface-overlay)) inset, 0 4px 12px hsl(220 40% 3% / 0.35)";
+            el.style.boxShadow = isLive
+              ? "0 0 32px hsl(var(--live) / 0.14), 0 2px 14px hsl(220 40% 2% / 0.45)"
+              : "0 2px 14px hsl(220 40% 2% / 0.35)";
           }}
         >
-          {/* Meta bar */}
+          {/* Matchup */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              padding: "20px 24px 16px",
+            }}
+          >
+            <TeamBlock
+              name={fixture.team1Name ?? "TBC"}
+              shortName={fixture.team1ShortName}
+              align="left"
+            />
+            <MatchCenter fixture={fixture} />
+            <TeamBlock
+              name={fixture.team2Name ?? "TBC"}
+              shortName={fixture.team2ShortName}
+              align="right"
+            />
+          </div>
+
+          {/* Footer */}
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              padding: "8px 16px",
+              padding: "8px 20px 10px",
+              borderTop: "1px solid hsl(var(--line))",
               background: "hsl(var(--surface-sunken))",
-              borderBottom: "1px solid hsl(var(--line))",
               gap: 12,
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                minWidth: 0,
+                overflow: "hidden",
+              }}
+            >
               <CalendarBlank
-                size={13}
-                weight="bold"
+                size={12}
                 style={{ color: "hsl(var(--ink-muted))", flexShrink: 0 }}
               />
               <span
@@ -269,16 +391,23 @@ function FixtureCard({ fixture, index }: { fixture: Fixture; index: number }) {
                   fontSize: "0.72rem",
                   color: "hsl(var(--ink-secondary))",
                   fontWeight: 600,
+                  whiteSpace: "nowrap",
                 }}
               >
-                {formatDate(fixture.startTime)}
+                {formatTime(fixture.startTime)}
               </span>
               {fixture.venue && (
                 <>
-                  <span style={{ color: "hsl(var(--line-strong))" }}>·</span>
+                  <span
+                    style={{
+                      color: "hsl(var(--line-strong))",
+                      fontSize: "0.8rem",
+                    }}
+                  >
+                    ·
+                  </span>
                   <MapPin
                     size={11}
-                    weight="bold"
                     style={{ color: "hsl(var(--ink-muted))", flexShrink: 0 }}
                   />
                   <span
@@ -288,7 +417,6 @@ function FixtureCard({ fixture, index }: { fixture: Fixture; index: number }) {
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
-                      maxWidth: 200,
                     }}
                   >
                     {fixture.venue}
@@ -296,22 +424,7 @@ function FixtureCard({ fixture, index }: { fixture: Fixture; index: number }) {
                 </>
               )}
             </div>
-            <span className={`badge badge-${fixture.status}`}>{fixture.status}</span>
-          </div>
-
-          {/* Matchup row */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto 1fr",
-              alignItems: "center",
-              gap: 16,
-              padding: "16px 20px",
-            }}
-          >
-            <TeamChip name={fixture.team1Name ?? "TBC"} id={fixture.team1Id} align="left" />
-            <ScoreChip fixture={fixture} />
-            <TeamChip name={fixture.team2Name ?? "TBC"} id={fixture.team2Id} align="right" />
+            <StatusPill status={fixture.status} />
           </div>
         </div>
       </Link>
@@ -319,16 +432,52 @@ function FixtureCard({ fixture, index }: { fixture: Fixture; index: number }) {
   );
 }
 
+function DateHeader({ iso }: { iso: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        margin: "28px 0 12px",
+      }}
+    >
+      <span
+        style={{
+          fontSize: "0.72rem",
+          fontWeight: 800,
+          color: "hsl(var(--ink-secondary))",
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {formatDateHeader(iso)}
+      </span>
+      <div
+        style={{ flex: 1, height: 1, background: "hsl(var(--line))" }}
+      />
+    </motion.div>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
+
 export default function FixturesPage() {
   const { competition, loading: authLoading } = useRequireAuth();
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [filter, setFilter] = useState<FilterKey>("all");
 
   useEffect(() => {
     if (!competition?.slug) return;
     setLoading(true);
-    apiFetch<{ fixtures: Fixture[] }>(`/api/competitions/${competition.slug}/fixtures`)
+    apiFetch<{ fixtures: Fixture[] }>(
+      `/api/competitions/${competition.slug}/fixtures`
+    )
       .then((d) => setFixtures(d.fixtures))
       .catch((err) =>
         setError(err instanceof Error ? err.message : "Failed to load fixtures.")
@@ -336,28 +485,48 @@ export default function FixturesPage() {
       .finally(() => setLoading(false));
   }, [competition?.slug]);
 
-  const sorted = [...fixtures].sort((a, b) => {
-    const ai = STATUS_ORDER.indexOf(a.status);
-    const bi = STATUS_ORDER.indexOf(b.status);
-    if (ai !== bi) return ai - bi;
-    return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
-  });
+  const filtered = useMemo(() => {
+    if (filter === "all") return fixtures;
+    return fixtures.filter((f) => f.status === filter);
+  }, [fixtures, filter]);
+
+  // Sort: chronological within each status group (live → upcoming → completed)
+  const STATUS_ORDER = ["live", "upcoming", "completed", "postponed", "cancelled"];
+  const sorted = useMemo(
+    () =>
+      [...filtered].sort((a, b) => {
+        const ai = STATUS_ORDER.indexOf(a.status);
+        const bi = STATUS_ORDER.indexOf(b.status);
+        if (ai !== bi) return ai - bi;
+        return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+      }),
+    [filtered]
+  );
+
+  // Group by calendar date for "all" view
+  const grouped = useMemo(() => {
+    if (filter !== "all") return null;
+    const map = new Map<string, Fixture[]>();
+    for (const f of sorted) {
+      const key = dateKey(f.startTime);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(f);
+    }
+    return [...map.entries()];
+  }, [sorted, filter]);
+
+  const liveCnt = fixtures.filter((f) => f.status === "live").length;
+  const upcomingCnt = fixtures.filter((f) => f.status === "upcoming").length;
+  const completedCnt = fixtures.filter((f) => f.status === "completed").length;
+
+  const counts: Record<string, number> = { live: liveCnt, upcoming: upcomingCnt, completed: completedCnt };
 
   if (authLoading || loading) {
     return (
       <div className="page">
-        <div
-          style={{
-            display: "grid",
-            gap: 10,
-          }}
-        >
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div
-              key={i}
-              className="skeleton"
-              style={{ height: 96, borderRadius: 12 }}
-            />
+        <div style={{ display: "grid", gap: 10 }}>
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 112, borderRadius: 14 }} />
           ))}
         </div>
       </div>
@@ -378,6 +547,80 @@ export default function FixturesPage() {
         </p>
       </motion.div>
 
+      {/* Filter bar */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.08 }}
+        style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}
+      >
+        {FILTERS.map(({ key, label }) => {
+          const cnt = counts[key] ?? 0;
+          const isActive = filter === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setFilter(key)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "6px 14px",
+                borderRadius: 20,
+                border: `1px solid ${
+                  isActive ? "hsl(var(--brand) / 0.6)" : "hsl(var(--line))"
+                }`,
+                background: isActive
+                  ? "hsl(var(--brand) / 0.15)"
+                  : "hsl(var(--surface-raised))",
+                color: isActive
+                  ? "hsl(var(--brand-light))"
+                  : "hsl(var(--ink-secondary))",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                cursor: "pointer",
+                transition: "all 120ms ease",
+                letterSpacing: "0.03em",
+              }}
+            >
+              {key === "live" && liveCnt > 0 && (
+                <span
+                  className="live-dot"
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: "hsl(var(--live))",
+                    display: "inline-block",
+                  }}
+                />
+              )}
+              {label}
+              {key !== "all" && cnt > 0 && (
+                <span
+                  style={{
+                    fontSize: "0.62rem",
+                    fontWeight: 800,
+                    background:
+                      key === "live"
+                        ? "hsl(var(--live-bg))"
+                        : "hsl(var(--surface-sunken))",
+                    color:
+                      key === "live"
+                        ? "hsl(var(--live))"
+                        : "hsl(var(--ink-muted))",
+                    borderRadius: 10,
+                    padding: "1px 6px",
+                  }}
+                >
+                  {cnt}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </motion.div>
+
       {error ? <p className="notice notice-error">{error}</p> : null}
 
       {sorted.length === 0 ? (
@@ -389,8 +632,17 @@ export default function FixturesPage() {
           }}
         >
           <Trophy size={40} weight="thin" style={{ marginBottom: 12, opacity: 0.4 }} />
-          <p style={{ fontSize: "0.9rem" }}>No fixtures have been added yet.</p>
+          <p style={{ fontSize: "0.9rem" }}>No fixtures found.</p>
         </div>
+      ) : grouped ? (
+        grouped.map(([_key, group]) => (
+          <div key={_key}>
+            <DateHeader iso={group[0].startTime} />
+            {group.map((f, i) => (
+              <FixtureCard key={f.id} fixture={f} index={i} />
+            ))}
+          </div>
+        ))
       ) : (
         sorted.map((f, i) => <FixtureCard key={f.id} fixture={f} index={i} />)
       )}

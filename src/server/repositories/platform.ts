@@ -110,12 +110,31 @@ export function platformRepository() {
 
     fixtures: {
       async list(competitionId: string): Promise<Fixture[]> {
-        const rows = await prisma.fixture.findMany({ where: { competitionId }, orderBy: { startTime: "asc" } });
-        return rows.map((r) => ({ ...r, score: j(r.score), result: j(r.result) }) as unknown as Fixture);
+        const rows = await prisma.fixture.findMany({
+          where: { competitionId },
+          orderBy: { startTime: "asc" },
+          include: { team1: { select: { shortName: true } }, team2: { select: { shortName: true } } }
+        });
+        return rows.map((r) => ({
+          ...r,
+          team1ShortName: r.team1?.shortName ?? undefined,
+          team2ShortName: r.team2?.shortName ?? undefined,
+          score: j(r.score),
+          result: j(r.result)
+        }) as unknown as Fixture);
       },
       async findById(id: string): Promise<Fixture | null> {
-        const r = await prisma.fixture.findUnique({ where: { id } });
-        return r ? ({ ...r, score: j(r.score), result: j(r.result) } as unknown as Fixture) : null;
+        const r = await prisma.fixture.findUnique({
+          where: { id },
+          include: { team1: { select: { shortName: true } }, team2: { select: { shortName: true } } }
+        });
+        return r ? ({
+          ...r,
+          team1ShortName: r.team1?.shortName ?? undefined,
+          team2ShortName: r.team2?.shortName ?? undefined,
+          score: j(r.score),
+          result: j(r.result)
+        } as unknown as Fixture) : null;
       },
       async upsertMany(items: Array<Omit<Fixture, "id"> & { id?: string }>) {
         const docs = items.map((item) => ({ id: item.id ?? newId(), ...item }));
