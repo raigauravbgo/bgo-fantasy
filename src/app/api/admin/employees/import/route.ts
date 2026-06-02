@@ -76,11 +76,13 @@ function parseRows(raw: Record<string, unknown>[]) {
   const rows: Array<{ employeeId: string; lastName: string; firstName: string; fullName: string; hireDate: string }> = [];
 
   for (const r of raw) {
-    // Support both column name variants
-    const employeeId = str(r["Employee ID"] ?? r["employeeId"] ?? r["employee_id"]);
+    // Support both column name variants (including WD EID from Workday exports)
+    const employeeId = str(r["Employee ID"] ?? r["employeeId"] ?? r["employee_id"] ?? r["WD EID"] ?? r["WD_EID"]);
     const lastName = str(r["Legal Name - Last Name"] ?? r["lastName"] ?? r["last_name"] ?? r["Last Name"]);
     const firstName = str(r["Legal Name - First Name"] ?? r["firstName"] ?? r["first_name"] ?? r["First Name"]);
-    const fullName = str(r["Full Legal Name"] ?? r["fullName"] ?? r["full_name"] ?? r["Full Name"]) || `${firstName} ${lastName}`.trim();
+    // Strip parenthetical duplicates like "John Smith (John Smith)" common in Workday exports
+    const rawFullName = str(r["Full Legal Name"] ?? r["fullName"] ?? r["full_name"] ?? r["Full Name"]);
+    const fullName = rawFullName.replace(/\s*\(.*\)\s*$/, "").trim() || `${firstName} ${lastName}`.trim();
     const hireDate = parseDate(r["Hire Date"] ?? r["hireDate"] ?? r["hire_date"] ?? r["Date of Joining"]);
 
     if (!employeeId || !lastName || !hireDate) continue;
@@ -98,7 +100,8 @@ function parseRows(raw: Record<string, unknown>[]) {
 }
 
 function str(v: unknown): string {
-  return v == null ? "" : String(v).trim();
+  // Replace non-breaking spaces (\xa0) that Workday exports embed in names
+  return v == null ? "" : String(v).replace(/\xa0/g, " ").trim();
 }
 
 function parseDate(v: unknown): string {
