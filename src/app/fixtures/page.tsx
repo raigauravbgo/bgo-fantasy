@@ -6,44 +6,20 @@ import { motion } from "framer-motion";
 import { MapPin, CalendarBlank, Trophy } from "@phosphor-icons/react";
 import { useRequireAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { flagUrl } from "@/lib/flags";
 import type { Fixture } from "@/lib/types";
 
-// ── Flag helpers ──────────────────────────────────────────────────────────────
-
-const TLA_TO_A2: Record<string, string> = {
-  AFG: "AF", ALB: "AL", ALG: "DZ", AND: "AD", ANG: "AO", ARG: "AR",
-  ARM: "AM", AUS: "AU", AUT: "AT", AZE: "AZ", BEL: "BE", BEN: "BJ",
-  BFA: "BF", BGD: "BD", BIH: "BA", BLR: "BY", BOL: "BO", BOS: "BA",
-  BRA: "BR", BUL: "BG", CAM: "KH", CAN: "CA", CHI: "CL", CHN: "CN",
-  CIV: "CI", CMR: "CM", COD: "CD", COG: "CG", COL: "CO", CPV: "CV",
-  CRC: "CR", CRO: "HR", CUB: "CU", CYP: "CY", CZE: "CZ", DEN: "DK",
-  DOM: "DO", ECU: "EC", EGY: "EG", ENG: "GB", ESP: "ES", ETH: "ET",
-  FIN: "FI", FRA: "FR", GAB: "GA", GEO: "GE", GER: "DE", GHA: "GH",
-  GNB: "GW", GRE: "GR", GTM: "GT", GUI: "GN", HON: "HN", HUN: "HU",
-  IDN: "ID", IND: "IN", IRL: "IE", IRN: "IR", IRQ: "IQ", ISL: "IS",
-  ISR: "IL", ITA: "IT", IVC: "CI", JAM: "JM", JAP: "JP", JOR: "JO",
-  KAZ: "KZ", KEN: "KE", KOR: "KR", KSA: "SA", KUW: "KW", LBN: "LB",
-  LIB: "LY", MAD: "MG", MAR: "MA", MAS: "MY", MEX: "MX", MLI: "ML",
-  MON: "ME", MOZ: "MZ", MRT: "MR", MTN: "MT", NCA: "NI", NED: "NL",
-  NGA: "NG", NOR: "NO", NZL: "NZ", OMA: "OM", PAN: "PA", PAR: "PY",
-  PER: "PE", PHI: "PH", POL: "PL", POR: "PT", PRK: "KP", QAT: "QA",
-  ROU: "RO", RSA: "ZA", RUS: "RU", SA: "SA", SAU: "SA", SCO: "GB",
-  SEN: "SN", SLE: "SL", SLO: "SI", SLV: "SV", SOM: "SO", SRB: "RS",
-  SSD: "SS", SUI: "CH", SUR: "SR", SVK: "SK", SVN: "SI", SWE: "SE",
-  SYR: "SY", TAN: "TZ", THA: "TH", TRI: "TT", TUN: "TN", TUR: "TR",
-  UAE: "AE", UGA: "UG", UKR: "UA", URU: "UY", USA: "US", UZB: "UZ",
-  VEN: "VE", VIE: "VN", WAL: "GB", YEM: "YE", ZAM: "ZM", ZIM: "ZW",
-  // 2-letter passthroughs sometimes returned by API
-  US: "US", SK: "KR",
-};
-
-function flagEmoji(tla?: string | null): string {
-  if (!tla) return "🏳️";
-  const a2 = TLA_TO_A2[tla.toUpperCase()] ?? (tla.length === 2 ? tla.toUpperCase() : null);
-  if (!a2) return "🏳️";
+function FlagImg({ tla, height }: { tla?: string | null; height: number }) {
+  const url = flagUrl(tla);
+  if (!url) return <div style={{ width: height * 1.4, height, borderRadius: 4, background: "hsl(var(--surface-overlay))", flexShrink: 0 }} />;
   return (
-    String.fromCodePoint(0x1f1e6 + a2.charCodeAt(0) - 65) +
-    String.fromCodePoint(0x1f1e6 + a2.charCodeAt(1) - 65)
+    <img
+      src={url}
+      alt={tla ?? ""}
+      height={height}
+      style={{ borderRadius: 5, objectFit: "cover", display: "block", boxShadow: "0 2px 8px rgba(0,0,0,0.4)", flexShrink: 0 }}
+      onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+    />
   );
 }
 
@@ -88,7 +64,6 @@ function TeamBlock({
   shortName?: string | null;
   align: "left" | "right";
 }) {
-  const flag = flagEmoji(shortName);
   const isRight = align === "right";
   return (
     <div
@@ -101,16 +76,7 @@ function TeamBlock({
         minWidth: 0,
       }}
     >
-      <span
-        style={{
-          fontSize: "2.6rem",
-          lineHeight: 1,
-          filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.45))",
-          userSelect: "none",
-        }}
-      >
-        {flag}
-      </span>
+      <FlagImg tla={shortName} height={44} />
       <span
         style={{
           fontWeight: 700,

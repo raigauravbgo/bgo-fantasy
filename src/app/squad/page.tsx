@@ -7,6 +7,7 @@ import { useRequireAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import type { FantasyEntry, Player } from "@/lib/types";
 import { JerseyIcon } from "@/components/jersey-icon";
+import { flagUrl } from "@/lib/flags";
 
 type Position = "GK" | "DEF" | "MID" | "FWD";
 const POSITION_ORDER: Position[] = ["GK", "DEF", "MID", "FWD"];
@@ -274,9 +275,18 @@ export default function SquadPage() {
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
-            <span style={{ fontSize: "0.7rem", color: "hsl(var(--ink-muted))", fontWeight: 600 }}>
-              {player.teamShortName ?? "—"}
-            </span>
+            {flagUrl(player.teamShortName) ? (
+              <img
+                src={flagUrl(player.teamShortName)!}
+                alt={player.teamShortName ?? ""}
+                height={13}
+                style={{ borderRadius: 2, objectFit: "cover", display: "block" }}
+              />
+            ) : (
+              <span style={{ fontSize: "0.7rem", color: "hsl(var(--ink-muted))", fontWeight: 600 }}>
+                {player.teamShortName ?? "—"}
+              </span>
+            )}
             <span style={{
               fontSize: "0.6rem", fontWeight: 800, letterSpacing: "0.04em",
               background: posBg[player.position] ?? "hsl(var(--surface-overlay))",

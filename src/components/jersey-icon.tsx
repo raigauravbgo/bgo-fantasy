@@ -1,3 +1,5 @@
+import { flagUrl } from "@/lib/flags";
+
 // Primary + secondary colours for all 20 PL clubs
 const TEAM_COLORS: Record<string, { primary: string; secondary: string; pattern?: "stripes" | "hoops" | "sash" | "plain" }> = {
   // ── Premier League ──────────────────────────────────────────────────────────
@@ -80,6 +82,31 @@ const TEAM_COLORS: Record<string, { primary: string; secondary: string; pattern?
 const DEFAULT = { primary: "#6b7280", secondary: "#d1d5db", pattern: "plain" as const };
 
 export function JerseyIcon({ tla, size = 44 }: { tla: string; size?: number }) {
+  // For national teams (WC etc.) without known jersey colours, show a round flag badge
+  if (!TEAM_COLORS[tla]) {
+    const url = flagUrl(tla);
+    if (url) {
+      return (
+        <div
+          style={{
+            width: size,
+            height: size,
+            borderRadius: "50%",
+            overflow: "hidden",
+            border: "2px solid rgba(255,255,255,0.25)",
+            flexShrink: 0,
+          }}
+        >
+          <img
+            src={url}
+            alt={tla}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        </div>
+      );
+    }
+  }
+
   const cfg = TEAM_COLORS[tla] ?? DEFAULT;
   const { primary, secondary, pattern } = cfg;
   const s = size;

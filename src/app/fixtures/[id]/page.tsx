@@ -5,26 +5,23 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useRequireAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
+import { flagUrl } from "@/lib/flags";
 import type { FixtureDetail, PlayerStatDisplay, PointBreakdown } from "@/lib/types";
 
 type Tab = "match" | "stats" | "points";
 
-const TLA_TO_A2: Record<string, string> = {
-  AFG:"AF",ALG:"DZ",ARG:"AR",AUS:"AU",BEL:"BE",BIH:"BA",BOL:"BO",BOS:"BA",
-  BRA:"BR",CAN:"CA",CHI:"CL",CMR:"CM",COL:"CO",CRC:"CR",CZE:"CZ",DEN:"DK",
-  ECU:"EC",EGY:"EG",ENG:"GB",ESP:"ES",FRA:"FR",GER:"DE",GHA:"GH",GRE:"GR",
-  HON:"HN",HUN:"HU",IRL:"IE",IRN:"IR",ITA:"IT",IVC:"CI",JAM:"JM",JAP:"JP",
-  JOR:"JO",KOR:"KR",KSA:"SA",MAR:"MA",MAS:"MY",MEX:"MX",MLI:"ML",NED:"NL",
-  NGA:"NG",NZL:"NZ",OMA:"OM",PAN:"PA",PAR:"PY",PER:"PE",POL:"PL",POR:"PT",
-  QAT:"QA",ROU:"RO",RSA:"ZA",SA:"SA",SAU:"SA",SCO:"GB",SEN:"SN",SLO:"SI",
-  SRB:"RS",SUI:"CH",SVK:"SK",SVN:"SI",TUN:"TN",TUR:"TR",UAE:"AE",UKR:"UA",
-  URU:"UY",USA:"US",VEN:"VE",WAL:"GB",SK:"KR",US:"US",
-};
-function detailFlag(tla?: string | null): string {
-  if (!tla) return "🏳️";
-  const a2 = TLA_TO_A2[tla.toUpperCase()] ?? (tla.length === 2 ? tla.toUpperCase() : null);
-  if (!a2) return "🏳️";
-  return String.fromCodePoint(0x1f1e6+a2.charCodeAt(0)-65)+String.fromCodePoint(0x1f1e6+a2.charCodeAt(1)-65);
+function DetailFlag({ tla }: { tla?: string | null }) {
+  const url = flagUrl(tla);
+  if (!url) return null;
+  return (
+    <img
+      src={url}
+      alt={tla ?? ""}
+      height={44}
+      style={{ borderRadius: 5, objectFit: "cover", display: "block", boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}
+      onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+    />
+  );
 }
 
 function formatDate(iso: string) {
@@ -218,9 +215,7 @@ export default function FixtureDetailPage() {
               }}
             >
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                <span style={{ fontSize: "2.4rem", lineHeight: 1, filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.4))" }}>
-                  {detailFlag(fixture.team1ShortName)}
-                </span>
+                <DetailFlag tla={fixture.team1ShortName} />
                 <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>
                   {fixture.team1Name ?? "TBC"}
                 </div>
@@ -251,9 +246,7 @@ export default function FixtureDetailPage() {
                 </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
-                <span style={{ fontSize: "2.4rem", lineHeight: 1, filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.4))" }}>
-                  {detailFlag(fixture.team2ShortName)}
-                </span>
+                <DetailFlag tla={fixture.team2ShortName} />
                 <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>
                   {fixture.team2Name ?? "TBC"}
                 </div>
