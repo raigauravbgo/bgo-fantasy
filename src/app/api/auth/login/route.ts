@@ -24,7 +24,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Non-admin accounts are only valid while the employee is still on the roster
-    if (user.role !== "admin" && user.employeeId) {
+    const isAdminRole = user.role === "admin" || user.role === "super_admin";
+    if (!isAdminRole && user.employeeId) {
       const emp = await employeesRepository().findByEmployeeId(user.employeeId);
       if (!emp) {
         throw new RequestError("Your account is no longer active. Please contact HR.", 401);
