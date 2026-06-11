@@ -6,6 +6,7 @@ import { verifyPassword } from "@/server/auth/password";
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/server/auth/session";
 import { handleApiError, json, parseJson, RequestError } from "@/server/api/http";
 import { usersRepository } from "@/server/repositories/users";
+import { employeesRepository } from "@/server/repositories/employees";
 
 const schema = z.object({
   employeeId: z.string().min(1),
@@ -20,6 +21,14 @@ export async function POST(request: NextRequest) {
 
     if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
       throw new RequestError("Invalid Employee ID or password", 401);
+    }
+
+    // Non-admin accounts are only valid while the employee is still on the roster
+    if (user.role !== "admin" && user.employeeId) {
+      const emp = await employeesRepository().findByEmployeeId(user.employeeId);
+      if (!emp) {
+        throw new RequestError("Your account is no longer active. Please contact HR.", 401);
+      }
     }
 
     const token = await createSessionToken({ id: user.id, role: user.role });

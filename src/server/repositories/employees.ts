@@ -27,16 +27,28 @@ export function employeesRepository() {
     },
 
     async bulkUpsert(records: Array<{ employeeId: string; lastName: string; firstName: string; fullName: string; hireDate: string }>) {
-      const items = records.map((r) => ({
-        id: newId(),
-        employeeId: r.employeeId,
-        lastName: r.lastName,
-        firstName: r.firstName,
-        fullName: r.fullName,
-        hireDate: new Date(r.hireDate)
-      }));
-      // Use createMany with skipDuplicates for efficiency
-      return prisma.employee.createMany({ data: items, skipDuplicates: true });
+      const incomingIds = records.map((r) => r.employeeId);
+
+      // Remove anyone no longer on the roster
+      const { count: removed } = await prisma.employee.deleteMany({
+        where: { employeeId: { notIn: incomingIds } }
+      });
+
+      // Upsert all incoming records in batches of 100
+      const BATCH = 100;
+      for (let i = 0; i < records.length; i += BATCH) {
+        await Promise.all(
+          records.slice(i, i + BATCH).map((r) =>
+            prisma.employee.upsert({
+              where: { employeeId: r.employeeId },
+              update: { lastName: r.lastName, firstName: r.firstName, fullName: r.fullName, hireDate: new Date(r.hireDate) },
+              create: { id: newId(), employeeId: r.employeeId, lastName: r.lastName, firstName: r.firstName, fullName: r.fullName, hireDate: new Date(r.hireDate) }
+            })
+          )
+        );
+      }
+
+      return { upserted: records.length, removed };
     },
 
     async count(): Promise<number> {

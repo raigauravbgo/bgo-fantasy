@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     const result = await repo.bulkUpsert(rows);
     const total = await repo.count();
 
-    return json({ imported: result.count, total, parsed: rows.length });
+    return json({ imported: result.upserted, removed: result.removed, total, parsed: rows.length });
   } catch (error) {
     return handleApiError(error);
   }
