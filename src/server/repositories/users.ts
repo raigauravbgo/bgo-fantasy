@@ -34,6 +34,9 @@ export function usersRepository() {
         }
       }) as Promise<User>;
     },
+    async updatePassword(id: string, passwordHash: string): Promise<void> {
+      await prisma.user.update({ where: { id }, data: { passwordHash, updatedAt: new Date() } });
+    },
     async list(): Promise<User[]> {
       return prisma.user.findMany({ orderBy: { createdAt: "desc" } }) as Promise<User[]>;
     }

@@ -83,6 +83,9 @@ export default function LoginPage() {
           No account?{" "}
           <Link href="/register">Register with your Employee ID</Link>
         </p>
+        <p className="auth-footer">
+          <Link href="/reset-password">Forgot your password?</Link>
+        </p>
       </div>
     </div>
   );
