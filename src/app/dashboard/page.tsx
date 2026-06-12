@@ -7,7 +7,7 @@ import { TrendUp, Medal, Lock, SoccerBall, Trophy } from "@phosphor-icons/react"
 
 import { useRequireAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
-import type { Announcement, DashboardData, Fixture, Player } from "@/lib/types";
+import type { DashboardData, Fixture, Player } from "@/lib/types";
 
 const POS_COLOR: Record<string, string> = {
   GK: "hsl(var(--pos-gk))", DEF: "hsl(var(--pos-def))",
@@ -70,19 +70,6 @@ function FixtureItem({ fixture, pts }: { fixture: Fixture; pts?: number | null }
   );
 }
 
-function AnnouncementItem({ item }: { item: Announcement }) {
-  return (
-    <div className={`announcement ${item.priority === "high" ? "high" : ""}`}>
-      {item.title ? (
-        <div className="announcement-title">
-          {item.icon ? `${item.icon} ` : ""}
-          {item.title}
-        </div>
-      ) : null}
-      <div className="announcement-body">{item.message}</div>
-    </div>
-  );
-}
 
 function BudgetBar({ used, total }: { used: number; total: number }) {
   const pct = total > 0 ? Math.min((used / total) * 100, 100) : 0;
@@ -328,16 +315,6 @@ export default function DashboardPage() {
           <BudgetBar used={data.entry.budgetUsed} total={budget} />
         </motion.div>
       )}
-
-      {/* Announcements */}
-      {data?.announcements && data.announcements.length > 0 ? (
-        <div style={{ marginBottom: "24px" }}>
-          <div className="section-title">Announcements</div>
-          {data.announcements.map((a) => (
-            <AnnouncementItem key={a.id} item={a} />
-          ))}
-        </div>
-      ) : null}
 
       <div className="dashboard-grid">
         {/* Main column */}
