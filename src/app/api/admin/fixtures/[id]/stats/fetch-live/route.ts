@@ -17,6 +17,7 @@ const LEAGUE_ID_MAP: Record<string, number> = {
   PPL: 94,   // Primeira Liga
   ELC: 40,   // Championship
   BSA: 71,   // Brasileirão
+  WC:  1,    // FIFA World Cup
 };
 
 type AfPlayer = {
