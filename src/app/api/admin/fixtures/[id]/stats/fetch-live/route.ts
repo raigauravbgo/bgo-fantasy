@@ -157,11 +157,12 @@ export async function POST(
     const afFixtureId = matched.fixture.id;
     const ftScore = matched.score.fulltime;
 
-    // Fetch player stats
-    const playerStats = await afFetch<AfPlayer[]>(
+    // Fetch player stats — response is [{team, players: [...]}, ...], flatten to player list
+    const teamStats = await afFetch<Array<{ team: { id: number }; players: AfPlayer[] }>>(
       `/fixtures/players?fixture=${afFixtureId}`,
       apiKey
     );
+    const playerStats = teamStats.flatMap((t) => t.players);
 
     // Determine clean sheet — team kept a clean sheet if opponent scored 0
     const homeGoals = ftScore.home ?? 0;
