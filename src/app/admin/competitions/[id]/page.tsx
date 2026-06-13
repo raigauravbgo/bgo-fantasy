@@ -41,6 +41,18 @@ type OverviewData = {
   users: AdminUser[];
 };
 
+type AdminPredictionSet = {
+  id: string;
+  fixtureId: string;
+  fixtureName?: string;
+  fixtureStartTime?: string;
+  fixtureStatus?: string;
+  status: string;
+  closesAt: string;
+  totalParticipants: number;
+  questions: Array<{ id: string; prompt: string; type?: string; points: number }>;
+};
+
 const SAMPLE_TEAMS = [
   { name: "Argentina", shortName: "ARG", countryCode: "AR" },
   { name: "Brazil", shortName: "BRA", countryCode: "BR" },
@@ -104,7 +116,9 @@ export default function CompetitionAdminPage() {
   const router = useRouter();
   const competitionId = params.id as string;
 
-  const [tab, setTab] = useState<"overview" | "competition" | "players" | "scoring" | "transfers" | "announcements">("overview");
+  const [tab, setTab] = useState<"overview" | "competition" | "players" | "scoring" | "transfers" | "announcements" | "predictions">("overview");
+  const [predictions, setPredictions] = useState<AdminPredictionSet[]>([]);
+  const [predLoading, setPredLoading] = useState(false);
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<string | null>(null);
@@ -128,6 +142,10 @@ export default function CompetitionAdminPage() {
   useEffect(() => {
     void loadOverview();
   }, [competitionId]);
+
+  useEffect(() => {
+    if (tab === "predictions") void loadPredictions();
+  }, [tab]);
 
   async function loadOverview() {
     setLoading(true);
@@ -397,7 +415,28 @@ export default function CompetitionAdminPage() {
     );
   }
 
-  const TABS = ["overview", "competition", "players", "scoring", "transfers", "announcements"] as const;
+  async function loadPredictions() {
+    setPredLoading(true);
+    try {
+      const d = await apiFetch<{ predictionSets: AdminPredictionSet[] }>(
+        `/api/admin/competitions/${competitionId}/predictions`
+      );
+      setPredictions(d.predictionSets);
+    } catch {
+      // silent
+    } finally {
+      setPredLoading(false);
+    }
+  }
+
+  async function scorePredSet(setId: string) {
+    await run("Predictions scored", () =>
+      apiFetch(`/api/admin/predictions/${setId}/score`, { method: "POST" })
+    );
+    void loadPredictions();
+  }
+
+  const TABS = ["overview", "competition", "players", "scoring", "predictions", "transfers", "announcements"] as const;
 
   return (
     <div className="page">
@@ -751,7 +790,7 @@ export default function CompetitionAdminPage() {
               })()}
 
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <button className="btn-outline" onClick={openPrediction} disabled={!!running}>Open match-winner prediction</button>
+                <button className="btn-outline" onClick={openPrediction} disabled={!!running}>Open predictions</button>
                 <button className="btn" onClick={publishImportedStats} disabled={!!running}>{running ? "Running…" : "✅ Publish imported stats"}</button>
                 <button className="btn-outline" onClick={fetchLiveStats} disabled={!!running}>{running ? "Running…" : "⚡ Fetch & publish real stats"}</button>
                 <button className="btn-outline" onClick={publishScoring} disabled={!!running}>{running ? "Running…" : "Publish dummy scoring (testing)"}</button>
@@ -824,6 +863,108 @@ export default function CompetitionAdminPage() {
           <div style={{ display: "flex", gap: "10px" }}>
             <button className="btn" onClick={() => setTransferWindow(true)}>Open window (3 transfers)</button>
             <button className="btn-outline" style={{ borderColor: "hsl(var(--danger))", color: "hsl(var(--danger))" }} onClick={() => setTransferWindow(false)}>Close window</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Predictions ──────────────────────────────────────── */}
+      {tab === "predictions" && (
+        <div className="stack">
+          <div className="card">
+            <div className="card-title">Open Predictions for Fixture</div>
+            <p style={{ fontSize: "0.875rem", marginBottom: "14px" }}>
+              Opens 5 prediction questions (match winner, BTTS, over/under 2.5, exact score, red card) for a fixture. Predictions lock at kick-off and are auto-scored when you publish stats.
+            </p>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <select
+                className="form-input"
+                style={{ maxWidth: 340 }}
+                value={selectedFixtureId}
+                onChange={(e) => setSelectedFixtureId(e.target.value)}
+              >
+                {fixtures.length === 0
+                  ? <option value="">No fixtures — import league data first</option>
+                  : fixtures
+                      .slice()
+                      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+                      .map((f) => <option key={f.id} value={f.id}>{fixtureLabel(f)}</option>)}
+              </select>
+              <button className="btn" onClick={openPrediction} disabled={!!running}>
+                Open predictions
+              </button>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">All Prediction Sets</div>
+            {predLoading ? (
+              <div className="loading-dots">Loading</div>
+            ) : predictions.length === 0 ? (
+              <p style={{ fontSize: "0.875rem", color: "hsl(var(--ink-muted))" }}>
+                No prediction sets yet. Open predictions for a fixture above.
+              </p>
+            ) : (
+              <div style={{ display: "grid", gap: "10px" }}>
+                {predictions.map((ps) => (
+                  <div key={ps.id} style={{
+                    padding: "14px 16px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(255,255,255,0.02)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    flexWrap: "wrap",
+                  }}>
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                      <div style={{ fontSize: "0.875rem", fontWeight: 700, color: "hsl(var(--ink))" }}>
+                        {ps.fixtureName ?? ps.fixtureId}
+                      </div>
+                      <div style={{ fontSize: "0.75rem", color: "hsl(var(--ink-muted))", marginTop: 2 }}>
+                        {ps.fixtureStartTime
+                          ? new Date(ps.fixtureStartTime).toLocaleString("en-GB", {
+                              day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+                            })
+                          : "–"
+                        }
+                        {" · "}{ps.questions.length} questions · {ps.totalParticipants} participant{ps.totalParticipants !== 1 ? "s" : ""}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span style={{
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        letterSpacing: "0.05em",
+                        textTransform: "uppercase",
+                        padding: "3px 9px",
+                        borderRadius: 6,
+                        background: ps.status === "scored"
+                          ? "rgba(34,197,94,0.12)"
+                          : ps.status === "closed"
+                            ? "rgba(239,68,68,0.12)"
+                            : "rgba(99,102,241,0.12)",
+                        color: ps.status === "scored"
+                          ? "hsl(var(--success))"
+                          : ps.status === "closed"
+                            ? "hsl(var(--danger))"
+                            : "hsl(var(--brand))",
+                      }}>
+                        {ps.status}
+                      </span>
+                      {ps.status !== "scored" && (
+                        <button
+                          className="btn btn-sm btn-outline"
+                          disabled={!!running}
+                          onClick={() => { void scorePredSet(ps.id); }}
+                        >
+                          Score now
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -185,8 +185,13 @@ export type PredictionSet = {
   questions: Array<{
     id: AppId;
     prompt: string;
-    options: Array<{ label: string; value: string }>;
+    type?: "match_winner" | "btts" | "over_under_2_5" | "exact_score" | "red_card";
+    voteMode?: "fixed" | "dynamic";
     points: number;
+    basePoints?: number;
+    minPoints?: number;
+    maxPoints?: number;
+    options: Array<{ label: string; value: string }>;
   }>;
 };
 

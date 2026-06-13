@@ -1,6 +1,7 @@
 import { handleApiError, json, requireAdminUser, RequestError } from "@/server/api/http";
 import { platformRepository } from "@/server/repositories/platform";
 import { calculateFixtureScoring } from "@/server/services/scoring";
+import { scorePredictionSet } from "@/server/services/predictions";
 import { getEnv } from "@/config/env";
 import type { SoccerRawStats } from "@/domain/adapters/soccer/stats-schema";
 
@@ -238,8 +239,9 @@ export async function POST(
       ...scoring
     });
 
-    await repo.fixtures.update(fixtureId, {
-      status: "completed",
+    const updatedFixture = {
+      ...fixture,
+      status: "completed" as const,
       score: { team1: homeGoals, team2: awayGoals },
       result: {
         winnerTeamId: homeGoals > awayGoals
@@ -248,7 +250,39 @@ export async function POST(
             ? fixture.team2Id
             : "draw"
       }
+    };
+
+    await repo.fixtures.update(fixtureId, {
+      status: updatedFixture.status,
+      score: updatedFixture.score,
+      result: updatedFixture.result,
     });
+
+    // Auto-score any open/closed prediction sets for this fixture
+    const allSets = await repo.predictions.listSets(fixture.competitionId);
+    const fixtureSets = allSets.filter(
+      (s) => s.fixtureId === fixtureId && (s.status === "open" || s.status === "closed")
+    );
+    if (fixtureSets.length > 0) {
+      const allPredictions = await repo.predictions.listUserPredictions(fixture.competitionId);
+      const fixtureStats = {
+        homeGoals,
+        awayGoals,
+        hasRedCard: statItems.some((si) => (si.stats.redCards ?? 0) > 0),
+      };
+      for (const set of fixtureSets) {
+        const results = scorePredictionSet({
+          set,
+          fixture: updatedFixture,
+          predictions: allPredictions,
+          stats: fixtureStats,
+        });
+        if (results.length > 0) {
+          await repo.predictions.replaceResults(fixture.competitionId, set.id, results);
+        }
+        await repo.predictions.upsertSet({ ...set, status: "scored" });
+      }
+    }
 
     await repo.audit.create({
       actorUserId: admin.id,

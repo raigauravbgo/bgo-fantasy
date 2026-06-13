@@ -77,13 +77,23 @@ export type LeaderboardRow = {
 export type PredictionSet = {
   id: string;
   fixtureId: string;
+  fixtureName?: string;
+  fixtureStartTime?: string;
   status: string;
   closesAt: string;
   questions: Array<{
     id: string;
     prompt: string;
-    options: Array<{ label: string; value: string }>;
+    type?: "match_winner" | "btts" | "over_under_2_5" | "exact_score" | "red_card";
+    voteMode?: "fixed" | "dynamic";
     points: number;
+    basePoints?: number;
+    minPoints?: number;
+    maxPoints?: number;
+    options: Array<{ label: string; value: string }>;
+    voteCounts?: Record<string, number>;
+    totalVotes?: number;
+    myAnswer?: string | null;
   }>;
 };
 

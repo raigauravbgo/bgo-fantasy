@@ -4,6 +4,7 @@ import { z } from "zod";
 import { handleApiError, json, parseJson, requireAdminUser, RequestError } from "@/server/api/http";
 import { platformRepository } from "@/server/repositories/platform";
 import { calculateFixtureScoring } from "@/server/services/scoring";
+import { scorePredictionSet } from "@/server/services/predictions";
 
 const schema = z.object({
   score: z
@@ -49,20 +50,47 @@ export async function POST(
     });
 
     const score = input.score;
+    const updatedResult = score
+      ? {
+          winnerTeamId:
+            score.team1 > score.team2
+              ? fixture.team1Id
+              : score.team2 > score.team1
+                ? fixture.team2Id
+                : "draw"
+        }
+      : fixture.result;
+
     await repo.fixtures.update(fixtureId, {
       status: "completed",
       score,
-      result: score
-        ? {
-            winnerTeamId:
-              score.team1 > score.team2
-                ? fixture.team1Id
-                : score.team2 > score.team1
-                  ? fixture.team2Id
-                  : "draw"
-          }
-        : fixture.result
+      result: updatedResult,
     });
+
+    // Auto-score any open/closed prediction sets for this fixture
+    if (score) {
+      const allSets = await repo.predictions.listSets(fixture.competitionId);
+      const fixtureSets = allSets.filter(
+        (s) => s.fixtureId === fixtureId && (s.status === "open" || s.status === "closed")
+      );
+      if (fixtureSets.length > 0) {
+        const allPredictions = await repo.predictions.listUserPredictions(fixture.competitionId);
+        const hasRedCard = rawStats.some((s) => (s.stats?.redCards ?? 0) > 0);
+        const updatedFixture = { ...fixture, score, result: updatedResult };
+        for (const set of fixtureSets) {
+          const results = scorePredictionSet({
+            set,
+            fixture: updatedFixture,
+            predictions: allPredictions,
+            stats: { homeGoals: score.team1, awayGoals: score.team2, hasRedCard },
+          });
+          if (results.length > 0) {
+            await repo.predictions.replaceResults(fixture.competitionId, set.id, results);
+          }
+          await repo.predictions.upsertSet({ ...set, status: "scored" });
+        }
+      }
+    }
 
     await repo.audit.create({
       actorUserId: admin.id,
