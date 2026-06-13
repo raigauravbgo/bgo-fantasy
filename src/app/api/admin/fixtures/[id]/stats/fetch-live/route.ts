@@ -35,13 +35,18 @@ type AfPlayer = {
 type AfFixture = {
   fixture: { id: number; date: string };
   teams: {
-    home: { name: string };
-    away: { name: string };
+    home: { id: number; name: string };
+    away: { id: number; name: string };
   };
   score: {
     fulltime: { home: number | null; away: number | null };
   };
 };
+
+// Strip diacritics so "Álvarez"=="Alvarez", "Jiménez"=="Jimenez", etc.
+function norm(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
 
 async function afFetch<T>(path: string, apiKey: string): Promise<T> {
   const res = await fetch(`${AF_BASE}${path}`, {
@@ -158,29 +163,40 @@ export async function POST(
     const afFixtureId = matched.fixture.id;
     const ftScore = matched.score.fulltime;
 
-    // Fetch player stats — response is [{team, players: [...]}, ...], flatten to player list
-    const teamStats = await afFetch<Array<{ team: { id: number }; players: AfPlayer[] }>>(
+    // Fetch player stats — response is [{team: {id, name}, players: [...]}, ...]
+    const teamStats = await afFetch<Array<{ team: { id: number; name: string }; players: AfPlayer[] }>>(
       `/fixtures/players?fixture=${afFixtureId}`,
       apiKey
     );
-    const playerStats = teamStats.flatMap((t) => t.players);
 
     // Determine clean sheet — team kept a clean sheet if opponent scored 0
     const homeGoals = ftScore.home ?? 0;
     const awayGoals = ftScore.away ?? 0;
 
     const players = await repo.players.list(fixture.competitionId);
-    const byName = new Map(players.map((p) => [p.name.toLowerCase(), p]));
+    // Index by normalized name for fast exact lookups
+    const byNorm = new Map(players.map((p) => [norm(p.name), p]));
 
-    // Fuzzy name match — try full name, then last name, then first word
-    function findPlayer(afName: string) {
-      const lower = afName.toLowerCase();
-      if (byName.has(lower)) return byName.get(lower);
-      // try last name
-      const parts = lower.split(" ");
-      const lastName = parts[parts.length - 1];
-      for (const [key, p] of byName) {
-        if (key.includes(lastName) || lastName.includes(key.split(" ").pop() ?? "")) return p;
+    // Build per-team player lists (normalized) for scoped last-name fallback
+    const byTeamNorm = new Map<string, typeof players>();
+    for (const p of players) {
+      const arr = byTeamNorm.get(p.teamId) ?? [];
+      arr.push(p);
+      byTeamNorm.set(p.teamId, arr);
+    }
+
+    // Find a DB player matching an API-Football name, scoped to one team.
+    // 1. Exact normalized match (any team — handles cross-team unique names)
+    // 2. Last-name match restricted to dbTeamId (prevents Álvarez ARG → Álvarez MEX)
+    function findPlayer(afName: string, dbTeamId: string) {
+      const n = norm(afName);
+      if (byNorm.has(n)) return byNorm.get(n);
+      const lastName = n.split(" ").pop() ?? "";
+      if (!lastName) return undefined;
+      for (const p of byTeamNorm.get(dbTeamId) ?? []) {
+        const pn = norm(p.name);
+        const pLast = pn.split(" ").pop() ?? "";
+        if (pLast === lastName || pn.includes(lastName) || lastName.includes(pLast)) return p;
       }
       return undefined;
     }
@@ -188,26 +204,28 @@ export async function POST(
     const statItems: Array<{ competitionId: string; fixtureId: string; playerId: string; source: "provider"; stats: SoccerRawStats }> = [];
     const unmapped: string[] = [];
 
-    for (const afPlayer of playerStats) {
-      const s = afPlayer.statistics[0];
-      if (!s || (s.games.minutes ?? 0) === 0) continue; // skip DNP
+    // Iterate by team group so we know home vs away for clean-sheet calc
+    // and can scope player name matching to the correct team
+    for (const group of teamStats) {
+      const isHome = group.team.id === matched.teams.home.id;
+      const dbTeamId = isHome ? fixture.team1Id : fixture.team2Id;
+      const cleanSheet = isHome ? awayGoals === 0 : homeGoals === 0;
 
-      const player = findPlayer(afPlayer.player.name);
-      if (!player) { unmapped.push(afPlayer.player.name); continue; }
+      for (const afPlayer of group.players) {
+        const s = afPlayer.statistics[0];
+        if (!s || (s.games.minutes ?? 0) === 0) continue; // skip DNP
 
-      // Clean sheet: home players keep CS if awayGoals=0, away players if homeGoals=0
-      // We don't know which team the player is on from our DB, so use minutes heuristic:
-      // Use fixture team assignment via teamId
-      const isHomeTeam = player.teamId === fixture.team1Id;
-      const cleanSheet = isHomeTeam ? awayGoals === 0 : homeGoals === 0;
+        const player = findPlayer(afPlayer.player.name, dbTeamId);
+        if (!player) { unmapped.push(afPlayer.player.name); continue; }
 
-      statItems.push({
-        competitionId: fixture.competitionId,
-        fixtureId,
-        playerId: player.id,
-        source: "provider",
-        stats: mapStats(afPlayer, cleanSheet)
-      });
+        statItems.push({
+          competitionId: fixture.competitionId,
+          fixtureId,
+          playerId: player.id,
+          source: "provider",
+          stats: mapStats(afPlayer, cleanSheet)
+        });
+      }
     }
 
     if (statItems.length === 0) {
