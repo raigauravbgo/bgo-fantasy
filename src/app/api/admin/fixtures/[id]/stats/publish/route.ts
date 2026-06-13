@@ -49,7 +49,14 @@ export async function POST(
       ...scoring
     });
 
-    const score = input.score;
+    // Use score from request body, or fall back to score already on the fixture
+    // (stored by the fetch-live step when admin fetched stats from API-Football)
+    const score = input.score ?? (
+      fixture.score?.team1 != null && fixture.score?.team2 != null
+        ? { team1: fixture.score.team1, team2: fixture.score.team2 }
+        : undefined
+    );
+
     const updatedResult = score
       ? {
           winnerTeamId:
@@ -63,7 +70,7 @@ export async function POST(
 
     await repo.fixtures.update(fixtureId, {
       status: "completed",
-      score,
+      score: score ?? fixture.score,
       result: updatedResult,
     });
 

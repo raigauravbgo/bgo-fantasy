@@ -1,14 +1,11 @@
 import { handleApiError, json, requireAdminUser, RequestError } from "@/server/api/http";
 import { platformRepository } from "@/server/repositories/platform";
-import { calculateFixtureScoring } from "@/server/services/scoring";
-import { scorePredictionSet } from "@/server/services/predictions";
 import { getEnv } from "@/config/env";
 import type { SoccerRawStats } from "@/domain/adapters/soccer/stats-schema";
 import type { Fixture } from "@/domain/models";
 
 const AF_BASE = "https://v3.football.api-sports.io";
 
-// football-data.org league code → API-Football league ID
 const LEAGUE_ID_MAP: Record<string, number> = {
   PL:  39,   // Premier League
   BL1: 78,   // Bundesliga
@@ -39,9 +36,7 @@ type AfFixture = {
     home: { id: number; name: string };
     away: { id: number; name: string };
   };
-  score: {
-    fulltime: { home: number | null; away: number | null };
-  };
+  score: { fulltime: { home: number | null; away: number | null } };
 };
 
 export type PlayerMapping = {
@@ -58,20 +53,19 @@ export type PlayerMapping = {
   matchType: "exact" | "lastname";
 };
 
-// Strip diacritics so "Álvarez"=="Alvarez", "Jiménez"=="Jimenez", etc.
+// Strip diacritics: "Álvarez"=="Alvarez", "Jiménez"=="Jimenez"
 function normName(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 
 async function afFetch<T>(path: string, apiKey: string): Promise<T> {
-  const res = await fetch(`${AF_BASE}${path}`, {
-    headers: { "x-apisports-key": apiKey }
-  });
+  const res = await fetch(`${AF_BASE}${path}`, { headers: { "x-apisports-key": apiKey } });
   if (!res.ok) throw new RequestError(`API-Football: ${res.status} ${await res.text()}`, 502);
   const data = await res.json() as { response: T; errors: unknown };
   const hasErrors =
     (Array.isArray(data.errors) && data.errors.length > 0) ||
-    (data.errors !== null && typeof data.errors === "object" && !Array.isArray(data.errors) && Object.keys(data.errors as object).length > 0);
+    (data.errors !== null && typeof data.errors === "object" && !Array.isArray(data.errors) &&
+      Object.keys(data.errors as object).length > 0);
   if (hasErrors) throw new RequestError(`API-Football error: ${JSON.stringify(data.errors)}`, 502);
   if (data.response === undefined) throw new RequestError(`API-Football returned unexpected response for ${path}`, 502);
   return data.response;
@@ -104,11 +98,8 @@ type MatchResult = {
   mappings: PlayerMapping[];
   unmapped: string[];
   statItems: Array<{
-    competitionId: string;
-    fixtureId: string;
-    playerId: string;
-    source: "provider";
-    stats: SoccerRawStats;
+    competitionId: string; fixtureId: string; playerId: string;
+    source: "provider"; stats: SoccerRawStats;
   }>;
 };
 
@@ -118,8 +109,7 @@ async function resolveMatchings(fixtureId: string, fixture: Fixture, apiKey: str
   const leagueCode = competition?.settings?.leagueCode;
   const leagueId = leagueCode ? LEAGUE_ID_MAP[leagueCode] : undefined;
   if (!leagueId) throw new RequestError(
-    `No API-Football league ID mapped for league code: ${leagueCode ?? "unknown"}.`,
-    400
+    `No API-Football league ID mapped for league code: ${leagueCode ?? "unknown"}.`, 400
   );
 
   const utcDate = new Date(fixture.startTime).toISOString().slice(0, 10);
@@ -139,7 +129,6 @@ async function resolveMatchings(fixtureId: string, fixture: Fixture, apiKey: str
       queryErrors.push(`${d}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-
   if (allAfFixtures.length === 0 && queryErrors.length === datesToTry.length) {
     throw new RequestError(`API-Football returned no fixtures. Errors: ${queryErrors.join(" | ")}`, 502);
   }
@@ -154,12 +143,10 @@ async function resolveMatchings(fixtureId: string, fixture: Fixture, apiKey: str
       (away.includes(t2.split(" ")[0]) || t2.includes(away.split(" ")[0]))
     );
   });
-
   if (!matched) {
     const available = allAfFixtures.map((af) => `${af.teams.home.name} vs ${af.teams.away.name}`).join(", ");
     throw new RequestError(
-      `Could not match fixture "${fixture.team1Name} vs ${fixture.team2Name}". Available: ${available || "none"}`,
-      404
+      `Could not match fixture "${fixture.team1Name} vs ${fixture.team2Name}". Available: ${available || "none"}`, 404
     );
   }
 
@@ -169,13 +156,11 @@ async function resolveMatchings(fixtureId: string, fixture: Fixture, apiKey: str
   const awayGoals = ftScore.away ?? 0;
 
   const teamStats = await afFetch<Array<{ team: { id: number; name: string }; players: AfPlayer[] }>>(
-    `/fixtures/players?fixture=${afFixtureId}`,
-    apiKey
+    `/fixtures/players?fixture=${afFixtureId}`, apiKey
   );
 
   const players = await repo.players.list(fixture.competitionId);
   const byNorm = new Map(players.map((p) => [normName(p.name), p]));
-
   const byTeamNorm = new Map<string, typeof players>();
   for (const p of players) {
     const arr = byTeamNorm.get(p.teamId) ?? [];
@@ -243,7 +228,7 @@ async function resolveMatchings(fixtureId: string, fixture: Fixture, apiKey: str
   return { afFixtureId, homeGoals, awayGoals, mappings, unmapped, statItems };
 }
 
-// GET — dry run: shows proposed name mappings without writing anything
+// ─── GET: pure preview — no DB writes ─────────────────────────────────────────
 export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> }
@@ -253,15 +238,12 @@ export async function GET(
     const { id: fixtureId } = await context.params;
     const apiKey = getEnv().APIFOOTBALL_API_KEY;
     if (!apiKey) throw new RequestError("APIFOOTBALL_API_KEY env var not set", 500);
-
     const repo = platformRepository();
     const fixture = await repo.fixtures.findById(fixtureId);
     if (!fixture) throw new RequestError("Fixture not found", 404);
 
     const { afFixtureId, homeGoals, awayGoals, mappings, unmapped } =
       await resolveMatchings(fixtureId, fixture, apiKey);
-
-    const fuzzyMappings = mappings.filter((m) => m.matchType === "lastname");
 
     return json({
       preview: true,
@@ -270,7 +252,7 @@ export async function GET(
       mapped: mappings.length,
       unmapped: unmapped.length,
       unmappedNames: unmapped,
-      fuzzyCount: fuzzyMappings.length,
+      fuzzyCount: mappings.filter((m) => m.matchType === "lastname").length,
       mappings,
     });
   } catch (error) {
@@ -278,7 +260,14 @@ export async function GET(
   }
 }
 
-// POST — writes stats, publishes points, auto-scores predictions
+// ─── POST: fetch from API + save raw stats — does NOT publish points ───────────
+//
+// This is step 1 of the two-phase flow:
+//   POST /fetch-live  →  saves raw stats, returns full mapping table + score
+//   POST /publish     →  admin confirms, publishes points, marks fixture complete
+//
+// Keeping these steps separate lets the admin review every mapping and the score
+// before any leaderboard changes are made.
 export async function POST(
   _request: Request,
   context: { params: Promise<{ id: string }> }
@@ -297,74 +286,20 @@ export async function POST(
       await resolveMatchings(fixtureId, fixture, apiKey);
 
     if (statItems.length === 0) {
-      throw new RequestError("No matching players found. Import league data first so player names are in the DB.", 422);
+      throw new RequestError("No matching players found. Import league data first.", 422);
     }
 
+    // Save raw stats only — points are NOT published yet
     await repo.rawStats.upsertMany(statItems);
 
-    const [rawStats, allPlayers, entries] = await Promise.all([
-      repo.rawStats.listByFixture(fixtureId),
-      repo.players.list(fixture.competitionId),
-      repo.entries.list(fixture.competitionId)
-    ]);
-
-    const scoring = calculateFixtureScoring({
-      competitionId: fixture.competitionId,
-      fixtureId,
-      rawStats,
-      players: allPlayers,
-      entries,
-      actorUserId: admin.id,
-      status: "published"
-    });
-
-    await repo.points.replaceFixturePoints({
-      competitionId: fixture.competitionId,
-      fixtureId,
-      ...scoring
-    });
-
-    const updatedFixture = {
-      ...fixture,
-      status: "completed" as const,
-      score: { team1: homeGoals, team2: awayGoals },
-      result: {
-        winnerTeamId: homeGoals > awayGoals
-          ? fixture.team1Id
-          : awayGoals > homeGoals
-            ? fixture.team2Id
-            : "draw"
-      }
-    };
-
+    // Store the API score on the fixture so publish can use it, but keep status as-is
     await repo.fixtures.update(fixtureId, {
-      status: updatedFixture.status,
-      score: updatedFixture.score,
-      result: updatedFixture.result,
+      score: { team1: homeGoals, team2: awayGoals },
     });
-
-    // Auto-score any open/closed prediction sets for this fixture
-    const allSets = await repo.predictions.listSets(fixture.competitionId);
-    const fixtureSets = allSets.filter(
-      (s) => s.fixtureId === fixtureId && (s.status === "open" || s.status === "closed")
-    );
-    if (fixtureSets.length > 0) {
-      const allPredictions = await repo.predictions.listUserPredictions(fixture.competitionId);
-      const fixtureStats = {
-        homeGoals,
-        awayGoals,
-        hasRedCard: statItems.some((si) => (si.stats.redCards ?? 0) > 0),
-      };
-      for (const set of fixtureSets) {
-        const results = scorePredictionSet({ set, fixture: updatedFixture, predictions: allPredictions, stats: fixtureStats });
-        if (results.length > 0) await repo.predictions.replaceResults(fixture.competitionId, set.id, results);
-        await repo.predictions.upsertSet({ ...set, status: "scored" });
-      }
-    }
 
     await repo.audit.create({
       actorUserId: admin.id,
-      action: "stats.fetch-and-publish",
+      action: "stats.fetched",
       entityType: "fixture",
       competitionId: fixture.competitionId,
       entityId: fixtureId,
@@ -374,18 +309,24 @@ export async function POST(
         mapped: statItems.length,
         unmapped: unmapped.length,
         unmappedNames: unmapped.slice(0, 10),
-        fuzzyMappings: mappings.filter((m) => m.matchType === "lastname").map((m) => `${m.apiName} → ${m.dbName}`),
-      }
+        fuzzyMappings: mappings
+          .filter((m) => m.matchType === "lastname")
+          .map((m) => `${m.apiName} → ${m.dbName}`),
+      },
     });
 
     return json({
+      statsSaved: true,
       afFixtureId,
       score: { home: homeGoals, away: awayGoals },
       mapped: statItems.length,
       unmapped: unmapped.length,
       unmappedNames: unmapped,
-      fuzzyMappings: mappings.filter((m) => m.matchType === "lastname").map((m) => `${m.apiName} → ${m.dbName}`),
-      pointsPublished: true,
+      fuzzyCount: mappings.filter((m) => m.matchType === "lastname").length,
+      fuzzyMappings: mappings
+        .filter((m) => m.matchType === "lastname")
+        .map((m) => `${m.apiName} → ${m.dbName}`),
+      mappings,
     });
   } catch (error) {
     return handleApiError(error);

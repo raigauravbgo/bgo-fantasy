@@ -277,33 +277,34 @@ export default function CompetitionAdminPage() {
     });
   }
 
-  async function previewMappings() {
+  // Step 1: fetch from API-Football, save raw stats, show review panel
+  async function fetchStatsForReview() {
     const fixtureId = selectedFixtureId || fixtures[0]?.id;
     if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
     setMappingPreview(null);
-    await run("Checking player mappings…", async () => {
-      const result = await apiFetch<typeof mappingPreview>(
-        `/api/admin/fixtures/${fixtureId}/stats/fetch-live`
-      );
-      setMappingPreview(result);
-      showNotice(`Preview ready — ${result?.mapped} matched, ${result?.unmapped} unmapped, ${result?.fuzzyCount} fuzzy.`);
-    });
-  }
-
-  async function fetchLiveStats() {
-    const fixtureId = selectedFixtureId || fixtures[0]?.id;
-    if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
-    setMappingPreview(null);
-    await run("Live stats fetched from API-Football", async () => {
-      const result = await apiFetch<{ afFixtureId: number; mapped: number; unmapped: number; unmappedNames: string[]; fuzzyMappings: string[]; score: { home: number; away: number } }>(
+    await run("Fetching stats from API-Football…", async () => {
+      const result = await apiFetch<NonNullable<typeof mappingPreview> & { statsSaved: boolean }>(
         `/api/admin/fixtures/${fixtureId}/stats/fetch-live`,
         { method: "POST" }
       );
-      const msg = `Mapped ${result.mapped} players. Score: ${result.score.home}–${result.score.away}.` +
-        (result.unmapped > 0 ? ` ${result.unmapped} unmapped: ${result.unmappedNames.slice(0, 5).join(", ")}` : "") +
-        (result.fuzzyMappings?.length > 0 ? ` Fuzzy: ${result.fuzzyMappings.slice(0, 3).join("; ")}` : "");
-      showNotice(msg);
+      setMappingPreview(result);
     });
+  }
+
+  // Step 2: admin has reviewed — publish points and mark fixture complete
+  async function confirmAndPublish() {
+    const fixtureId = selectedFixtureId || fixtures[0]?.id;
+    if (!fixtureId || !mappingPreview) return;
+    const { home, away } = mappingPreview.score;
+    await run("Publishing points…", async () => {
+      await apiFetch(`/api/admin/fixtures/${fixtureId}/stats/publish`, {
+        method: "POST",
+        body: { score: { team1: home, team2: away } },
+      });
+    });
+    setMappingPreview(null);
+    void loadOverview();
+    showNotice(`Published! Score: ${home}–${away}. Leaderboard updated.`);
   }
 
   async function publishImportedStats() {
@@ -820,63 +821,150 @@ export default function CompetitionAdminPage() {
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 <button className="btn-outline" onClick={openPrediction} disabled={!!running}>Open predictions</button>
                 <button className="btn" onClick={publishImportedStats} disabled={!!running}>{running ? "Running…" : "✅ Publish imported stats"}</button>
-                <button className="btn-outline" onClick={previewMappings} disabled={!!running}>{running ? "Running…" : "🔍 Preview player mappings"}</button>
-                <button className="btn-outline" onClick={fetchLiveStats} disabled={!!running}>{running ? "Running…" : "⚡ Fetch & publish real stats"}</button>
+                <button className="btn-outline" onClick={fetchStatsForReview} disabled={!!running}>{running ? "Running…" : "⚡ Fetch stats from API"}</button>
                 <button className="btn-outline" onClick={publishScoring} disabled={!!running}>{running ? "Running…" : "Publish dummy scoring (testing)"}</button>
               </div>
               <p className="form-hint">
-                <strong>Preview player mappings</strong> — calls API-Football and shows how each player name maps to your DB without writing anything. Review fuzzy matches before publishing.
-                <br /><strong>Fetch &amp; publish real stats</strong> — pulls goals, assists, cards, saves, minutes from API-Football and immediately publishes fantasy points.
+                <strong>Fetch stats from API</strong> — pulls player stats from API-Football, saves them, and shows a full review table. <em>Nothing is published until you confirm.</em>
                 <br />Dummy scoring generates fake stats for testing only.
               </p>
 
+              {/* ── Stats review panel (shown after fetch, before publish) ── */}
               {mappingPreview && (
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                    <div style={{ fontWeight: 700, fontSize: "0.875rem" }}>
-                      Mapping Preview · Score {mappingPreview.score.home}–{mappingPreview.score.away} · {mappingPreview.mapped} matched · {mappingPreview.unmapped} unmapped
-                      {mappingPreview.fuzzyCount > 0 && (
-                        <span style={{ color: "hsl(var(--warn))", marginLeft: 8 }}>⚠ {mappingPreview.fuzzyCount} fuzzy</span>
-                      )}
+                <div style={{
+                  marginTop: 20,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: 12,
+                  overflow: "hidden",
+                }}>
+                  {/* Panel header */}
+                  <div style={{
+                    padding: "14px 18px",
+                    background: "rgba(255,255,255,0.03)",
+                    borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: "1rem", color: "hsl(var(--ink))" }}>
+                        Review before publishing
+                      </div>
+                      <div style={{ fontSize: "0.78rem", color: "hsl(var(--ink-muted))", marginTop: 3 }}>
+                        Score from API: <strong style={{ color: "hsl(var(--ink))" }}>{mappingPreview.score.home} – {mappingPreview.score.away}</strong>
+                        {" · "}{mappingPreview.mapped} players matched
+                        {mappingPreview.unmapped > 0 && (
+                          <span style={{ color: "hsl(var(--danger))", marginLeft: 6 }}>· {mappingPreview.unmapped} unmapped</span>
+                        )}
+                        {mappingPreview.fuzzyCount > 0 && (
+                          <span style={{ color: "hsl(var(--warn))", marginLeft: 6 }}>· {mappingPreview.fuzzyCount} fuzzy matches</span>
+                        )}
+                      </div>
                     </div>
-                    <button className="btn-ghost btn-sm" onClick={() => setMappingPreview(null)}>✕ Close</button>
+                    <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                      <button
+                        className="btn-ghost btn-sm"
+                        onClick={() => setMappingPreview(null)}
+                        disabled={!!running}
+                      >
+                        Discard
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        onClick={confirmAndPublish}
+                        disabled={!!running}
+                        style={{ background: "hsl(var(--success))", borderColor: "hsl(var(--success))" }}
+                      >
+                        {running ? "Publishing…" : `✅ Confirm & publish (${mappingPreview.score.home}–${mappingPreview.score.away})`}
+                      </button>
+                    </div>
                   </div>
 
+                  {/* Warnings */}
                   {mappingPreview.unmappedNames.length > 0 && (
-                    <div className="notice notice-error" style={{ marginBottom: 10 }}>
-                      <strong>Unmapped (will get 0 pts):</strong> {mappingPreview.unmappedNames.join(", ")}
+                    <div style={{
+                      padding: "10px 18px",
+                      background: "rgba(239,68,68,0.08)",
+                      borderBottom: "1px solid rgba(239,68,68,0.15)",
+                      fontSize: "0.8rem",
+                      color: "hsl(var(--danger))",
+                    }}>
+                      <strong>Unmapped players (will score 0 pts):</strong> {mappingPreview.unmappedNames.join(", ")}
+                    </div>
+                  )}
+                  {mappingPreview.fuzzyCount > 0 && (
+                    <div style={{
+                      padding: "10px 18px",
+                      background: "rgba(245,158,11,0.07)",
+                      borderBottom: "1px solid rgba(245,158,11,0.15)",
+                      fontSize: "0.8rem",
+                      color: "hsl(var(--warn))",
+                    }}>
+                      <strong>⚠ Fuzzy matches below are highlighted</strong> — verify the API name maps to the correct player before confirming.
                     </div>
                   )}
 
+                  {/* Mapping table */}
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
                       <thead>
-                        <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                          {["API name", "Team", "Min", "G", "A", "Y", "R", "→ DB name", "Match"].map((h) => (
-                            <th key={h} style={{ padding: "6px 8px", textAlign: "left", color: "hsl(var(--ink-muted))", fontWeight: 600, whiteSpace: "nowrap" }}>{h}</th>
+                        <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
+                          {["API name", "Team", "Min", "G", "A", "Y", "R", "→ DB name (team)", "Match"].map((h) => (
+                            <th key={h} style={{ padding: "8px 10px", textAlign: "left", color: "hsl(var(--ink-muted))", fontWeight: 600, whiteSpace: "nowrap" }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {mappingPreview.mappings.map((m, i) => (
-                          <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: m.matchType === "lastname" ? "rgba(245,158,11,0.06)" : undefined }}>
-                            <td style={{ padding: "5px 8px", color: "hsl(var(--ink))" }}>{m.apiName}</td>
-                            <td style={{ padding: "5px 8px", color: "hsl(var(--ink-muted))" }}>{m.apiTeamName}</td>
-                            <td style={{ padding: "5px 8px" }}>{m.minutes}</td>
-                            <td style={{ padding: "5px 8px", color: m.goals > 0 ? "hsl(var(--success))" : undefined }}>{m.goals || "–"}</td>
-                            <td style={{ padding: "5px 8px" }}>{m.assists || "–"}</td>
-                            <td style={{ padding: "5px 8px", color: m.yellowCards > 0 ? "hsl(var(--warn))" : undefined }}>{m.yellowCards || "–"}</td>
-                            <td style={{ padding: "5px 8px", color: m.redCards > 0 ? "hsl(var(--danger))" : undefined }}>{m.redCards || "–"}</td>
-                            <td style={{ padding: "5px 8px", color: "hsl(var(--ink))" }}>{m.dbName}{m.dbTeamShortName ? ` (${m.dbTeamShortName})` : ""}</td>
-                            <td style={{ padding: "5px 8px" }}>
+                          <tr
+                            key={i}
+                            style={{
+                              borderBottom: "1px solid rgba(255,255,255,0.04)",
+                              background: m.matchType === "lastname" ? "rgba(245,158,11,0.06)" : undefined,
+                            }}
+                          >
+                            <td style={{ padding: "6px 10px", color: "hsl(var(--ink))", whiteSpace: "nowrap" }}>{m.apiName}</td>
+                            <td style={{ padding: "6px 10px", color: "hsl(var(--ink-muted))", fontSize: "0.75rem" }}>{m.apiTeamName}</td>
+                            <td style={{ padding: "6px 10px" }}>{m.minutes}</td>
+                            <td style={{ padding: "6px 10px", fontWeight: m.goals > 0 ? 700 : undefined, color: m.goals > 0 ? "hsl(var(--success))" : "hsl(var(--ink-muted))" }}>{m.goals || "–"}</td>
+                            <td style={{ padding: "6px 10px", color: m.assists > 0 ? "hsl(var(--brand))" : "hsl(var(--ink-muted))" }}>{m.assists || "–"}</td>
+                            <td style={{ padding: "6px 10px", color: m.yellowCards > 0 ? "hsl(var(--warn))" : "hsl(var(--ink-muted))" }}>{m.yellowCards || "–"}</td>
+                            <td style={{ padding: "6px 10px", color: m.redCards > 0 ? "hsl(var(--danger))" : "hsl(var(--ink-muted))", fontWeight: m.redCards > 0 ? 700 : undefined }}>{m.redCards || "–"}</td>
+                            <td style={{ padding: "6px 10px", color: "hsl(var(--ink))", whiteSpace: "nowrap" }}>
+                              {m.dbName}
+                              {m.dbTeamShortName && <span style={{ color: "hsl(var(--ink-muted))", marginLeft: 4 }}>({m.dbTeamShortName})</span>}
+                            </td>
+                            <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>
                               {m.matchType === "lastname"
-                                ? <span style={{ color: "hsl(var(--warn))", fontWeight: 700 }}>fuzzy</span>
-                                : <span style={{ color: "hsl(var(--ink-muted))" }}>exact</span>}
+                                ? <span style={{ color: "hsl(var(--warn))", fontWeight: 700, fontSize: "0.72rem" }}>⚠ fuzzy</span>
+                                : <span style={{ color: "hsl(var(--ink-muted))", fontSize: "0.72rem" }}>exact</span>}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Confirm footer */}
+                  <div style={{
+                    padding: "12px 18px",
+                    borderTop: "1px solid rgba(255,255,255,0.08)",
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: 8,
+                    background: "rgba(255,255,255,0.02)",
+                  }}>
+                    <button className="btn-ghost btn-sm" onClick={() => setMappingPreview(null)} disabled={!!running}>Discard</button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={confirmAndPublish}
+                      disabled={!!running}
+                      style={{ background: "hsl(var(--success))", borderColor: "hsl(var(--success))" }}
+                    >
+                      {running ? "Publishing…" : `✅ Confirm & publish (${mappingPreview.score.home}–${mappingPreview.score.away})`}
+                    </button>
                   </div>
                 </div>
               )}
