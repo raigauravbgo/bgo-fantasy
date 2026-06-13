@@ -119,6 +119,19 @@ export default function CompetitionAdminPage() {
   const [tab, setTab] = useState<"overview" | "competition" | "players" | "scoring" | "transfers" | "announcements" | "predictions">("overview");
   const [predictions, setPredictions] = useState<AdminPredictionSet[]>([]);
   const [predLoading, setPredLoading] = useState(false);
+  const [mappingPreview, setMappingPreview] = useState<{
+    score: { home: number; away: number };
+    mapped: number;
+    unmapped: number;
+    unmappedNames: string[];
+    fuzzyCount: number;
+    mappings: Array<{
+      apiName: string; apiTeamName: string; side: string;
+      minutes: number; goals: number; assists: number;
+      yellowCards: number; redCards: number;
+      dbName: string; dbTeamShortName?: string; matchType: string;
+    }>;
+  } | null>(null);
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<string | null>(null);
@@ -264,16 +277,31 @@ export default function CompetitionAdminPage() {
     });
   }
 
+  async function previewMappings() {
+    const fixtureId = selectedFixtureId || fixtures[0]?.id;
+    if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
+    setMappingPreview(null);
+    await run("Checking player mappings…", async () => {
+      const result = await apiFetch<typeof mappingPreview>(
+        `/api/admin/fixtures/${fixtureId}/stats/fetch-live`
+      );
+      setMappingPreview(result);
+      showNotice(`Preview ready — ${result?.mapped} matched, ${result?.unmapped} unmapped, ${result?.fuzzyCount} fuzzy.`);
+    });
+  }
+
   async function fetchLiveStats() {
     const fixtureId = selectedFixtureId || fixtures[0]?.id;
     if (!fixtureId) { showNotice("Select a fixture first.", "err"); return; }
+    setMappingPreview(null);
     await run("Live stats fetched from API-Football", async () => {
-      const result = await apiFetch<{ afFixtureId: number; mapped: number; unmapped: number; unmappedNames: string[]; score: { home: number; away: number } }>(
+      const result = await apiFetch<{ afFixtureId: number; mapped: number; unmapped: number; unmappedNames: string[]; fuzzyMappings: string[]; score: { home: number; away: number } }>(
         `/api/admin/fixtures/${fixtureId}/stats/fetch-live`,
         { method: "POST" }
       );
       const msg = `Mapped ${result.mapped} players. Score: ${result.score.home}–${result.score.away}.` +
-        (result.unmapped > 0 ? ` ${result.unmapped} unmapped: ${result.unmappedNames.slice(0, 5).join(", ")}` : "");
+        (result.unmapped > 0 ? ` ${result.unmapped} unmapped: ${result.unmappedNames.slice(0, 5).join(", ")}` : "") +
+        (result.fuzzyMappings?.length > 0 ? ` Fuzzy: ${result.fuzzyMappings.slice(0, 3).join("; ")}` : "");
       showNotice(msg);
     });
   }
@@ -792,13 +820,66 @@ export default function CompetitionAdminPage() {
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 <button className="btn-outline" onClick={openPrediction} disabled={!!running}>Open predictions</button>
                 <button className="btn" onClick={publishImportedStats} disabled={!!running}>{running ? "Running…" : "✅ Publish imported stats"}</button>
+                <button className="btn-outline" onClick={previewMappings} disabled={!!running}>{running ? "Running…" : "🔍 Preview player mappings"}</button>
                 <button className="btn-outline" onClick={fetchLiveStats} disabled={!!running}>{running ? "Running…" : "⚡ Fetch & publish real stats"}</button>
                 <button className="btn-outline" onClick={publishScoring} disabled={!!running}>{running ? "Running…" : "Publish dummy scoring (testing)"}</button>
               </div>
               <p className="form-hint">
-                <strong>Fetch &amp; publish real stats</strong> — pulls goals, assists, cards, saves, minutes from API-Football and immediately publishes fantasy points. Score is read from the API automatically.
+                <strong>Preview player mappings</strong> — calls API-Football and shows how each player name maps to your DB without writing anything. Review fuzzy matches before publishing.
+                <br /><strong>Fetch &amp; publish real stats</strong> — pulls goals, assists, cards, saves, minutes from API-Football and immediately publishes fantasy points.
                 <br />Dummy scoring generates fake stats for testing only.
               </p>
+
+              {mappingPreview && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <div style={{ fontWeight: 700, fontSize: "0.875rem" }}>
+                      Mapping Preview · Score {mappingPreview.score.home}–{mappingPreview.score.away} · {mappingPreview.mapped} matched · {mappingPreview.unmapped} unmapped
+                      {mappingPreview.fuzzyCount > 0 && (
+                        <span style={{ color: "hsl(var(--warn))", marginLeft: 8 }}>⚠ {mappingPreview.fuzzyCount} fuzzy</span>
+                      )}
+                    </div>
+                    <button className="btn-ghost btn-sm" onClick={() => setMappingPreview(null)}>✕ Close</button>
+                  </div>
+
+                  {mappingPreview.unmappedNames.length > 0 && (
+                    <div className="notice notice-error" style={{ marginBottom: 10 }}>
+                      <strong>Unmapped (will get 0 pts):</strong> {mappingPreview.unmappedNames.join(", ")}
+                    </div>
+                  )}
+
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                          {["API name", "Team", "Min", "G", "A", "Y", "R", "→ DB name", "Match"].map((h) => (
+                            <th key={h} style={{ padding: "6px 8px", textAlign: "left", color: "hsl(var(--ink-muted))", fontWeight: 600, whiteSpace: "nowrap" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mappingPreview.mappings.map((m, i) => (
+                          <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: m.matchType === "lastname" ? "rgba(245,158,11,0.06)" : undefined }}>
+                            <td style={{ padding: "5px 8px", color: "hsl(var(--ink))" }}>{m.apiName}</td>
+                            <td style={{ padding: "5px 8px", color: "hsl(var(--ink-muted))" }}>{m.apiTeamName}</td>
+                            <td style={{ padding: "5px 8px" }}>{m.minutes}</td>
+                            <td style={{ padding: "5px 8px", color: m.goals > 0 ? "hsl(var(--success))" : undefined }}>{m.goals || "–"}</td>
+                            <td style={{ padding: "5px 8px" }}>{m.assists || "–"}</td>
+                            <td style={{ padding: "5px 8px", color: m.yellowCards > 0 ? "hsl(var(--warn))" : undefined }}>{m.yellowCards || "–"}</td>
+                            <td style={{ padding: "5px 8px", color: m.redCards > 0 ? "hsl(var(--danger))" : undefined }}>{m.redCards || "–"}</td>
+                            <td style={{ padding: "5px 8px", color: "hsl(var(--ink))" }}>{m.dbName}{m.dbTeamShortName ? ` (${m.dbTeamShortName})` : ""}</td>
+                            <td style={{ padding: "5px 8px" }}>
+                              {m.matchType === "lastname"
+                                ? <span style={{ color: "hsl(var(--warn))", fontWeight: 700 }}>fuzzy</span>
+                                : <span style={{ color: "hsl(var(--ink-muted))" }}>exact</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
