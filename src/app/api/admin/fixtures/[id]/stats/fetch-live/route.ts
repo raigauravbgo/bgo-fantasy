@@ -133,16 +133,27 @@ async function resolveMatchings(fixtureId: string, fixture: Fixture, apiKey: str
     throw new RequestError(`API-Football returned no fixtures. Errors: ${queryErrors.join(" | ")}`, 502);
   }
 
-  const t1 = (fixture.team1Name ?? "").toLowerCase();
-  const t2 = (fixture.team2Name ?? "").toLowerCase();
-  const matched = allAfFixtures.find((af) => {
-    const home = af.teams.home.name.toLowerCase();
-    const away = af.teams.away.name.toLowerCase();
-    return (
-      (home.includes(t1.split(" ")[0]) || t1.includes(home.split(" ")[0])) &&
-      (away.includes(t2.split(" ")[0]) || t2.includes(away.split(" ")[0]))
-    );
-  });
+  // Match by TLA first (most reliable — "USA" === "USA"), then fall back to
+  // normalized long name prefix matching ("Germany" ⊂ "Germany", etc.).
+  const tla1 = normName(fixture.team1ShortName ?? "");
+  const tla2 = normName(fixture.team2ShortName ?? "");
+  const t1 = normName(fixture.team1Name ?? "");
+  const t2 = normName(fixture.team2Name ?? "");
+
+  function teamMatches(afName: string, tla: string, longName: string): boolean {
+    const af = normName(afName);
+    if (tla && af === tla) return true;
+    if (longName && af === longName) return true;
+    const afFirst = af.split(" ")[0];
+    const lnFirst = longName.split(" ")[0];
+    return (afFirst.length > 2 && longName.includes(afFirst)) ||
+           (lnFirst.length > 2 && af.includes(lnFirst));
+  }
+
+  const matched = allAfFixtures.find((af) =>
+    teamMatches(af.teams.home.name, tla1, t1) &&
+    teamMatches(af.teams.away.name, tla2, t2)
+  );
   if (!matched) {
     const available = allAfFixtures.map((af) => `${af.teams.home.name} vs ${af.teams.away.name}`).join(", ");
     throw new RequestError(

@@ -83,6 +83,8 @@ export type Fixture = {
   team2Id: AppId;
   team1Name?: string;
   team2Name?: string;
+  team1ShortName?: string;
+  team2ShortName?: string;
   status: FixtureStatus;
   startTime: Date;
   venue?: string;
