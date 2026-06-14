@@ -96,7 +96,7 @@ export function platformRepository() {
             return prisma.player.upsert({
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               where: { competitionId_name: { competitionId: item.competitionId, name: item.name } } as any,
-              update: { teamId: item.teamId, teamName: item.teamName, teamShortName: item.teamShortName, position: item.position },
+              update: { teamId: item.teamId, teamName: item.teamName, teamShortName: item.teamShortName },
               create: { id, competitionId: item.competitionId, teamId: item.teamId, name: item.name, teamName: item.teamName, teamShortName: item.teamShortName, position: item.position, price: item.price, status: item.status }
             });
           })
