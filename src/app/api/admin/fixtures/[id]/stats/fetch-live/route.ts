@@ -289,7 +289,9 @@ export async function POST(
       throw new RequestError("No matching players found. Import league data first.", 422);
     }
 
-    // Save raw stats only — points are NOT published yet
+    // Delete stale raw stats first so orphaned rows from previous (buggy) fetches
+    // don't persist alongside the corrected ones.
+    await repo.rawStats.deleteByFixture(fixtureId);
     await repo.rawStats.upsertMany(statItems);
 
     // Store the API score on the fixture so publish can use it, but keep status as-is

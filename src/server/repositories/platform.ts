@@ -190,6 +190,9 @@ export function platformRepository() {
         const rows = await prisma.rawStat.findMany({ where: { fixtureId } });
         return rows.map((r) => ({ ...r, stats: j(r.stats) }) as unknown as RawStat);
       },
+      async deleteByFixture(fixtureId: string) {
+        await prisma.rawStat.deleteMany({ where: { fixtureId } });
+      },
       async upsertMany(items: Array<Omit<RawStat, "id" | "importedAt">>) {
         const now = new Date();
         await Promise.all(
