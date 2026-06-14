@@ -147,8 +147,14 @@ async function resolveMatchings(fixtureId: string, fixture: Fixture, apiKey: str
       if (longName && af === longName) return true;
       const afFirst = af.split(" ")[0];
       const lnFirst = longName.split(" ")[0];
-      return (afFirst.length > 2 && longName.includes(afFirst)) ||
-             (lnFirst.length > 2 && af.includes(lnFirst));
+      if ((afFirst.length > 2 && longName.includes(afFirst)) ||
+          (lnFirst.length > 2 && af.includes(lnFirst))) return true;
+      // Common-prefix check: "turkey" vs "turkiye" share "turk" (4 chars)
+      const shorter = afFirst.length < lnFirst.length ? afFirst : lnFirst;
+      const longer  = afFirst.length < lnFirst.length ? lnFirst : afFirst;
+      let prefixLen = 0;
+      while (prefixLen < shorter.length && shorter[prefixLen] === longer[prefixLen]) prefixLen++;
+      return prefixLen >= 4 && prefixLen / shorter.length >= 0.6;
     }
 
     const nameMatched = allAfFixtures.find((af) =>
