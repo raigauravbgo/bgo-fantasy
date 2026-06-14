@@ -313,6 +313,12 @@ export function platformRepository() {
         return prisma.announcement.create({
           data: { id: newId(), createdAt: new Date(), ...input }
         }) as Promise<Announcement>;
+      },
+      async findById(id: string): Promise<Announcement | null> {
+        return prisma.announcement.findUnique({ where: { id } }) as Promise<Announcement | null>;
+      },
+      async delete(id: string): Promise<void> {
+        await prisma.announcement.delete({ where: { id } });
       }
     },
 

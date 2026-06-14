@@ -34,7 +34,7 @@ type OverviewData = {
   players: AdminPlayer[];
   fixtures: AdminFixture[];
   entries: AdminEntry[];
-  announcements: unknown[];
+  announcements: { id: string; title?: string; message: string; icon?: string; priority: string; createdAt: string; expiresAt?: string }[];
   auditLogs: { action: string; createdAt: string }[];
   playerPoints: PlayerPoints[];
   entryPoints: { fixtureId: string; entryId: string; points: number }[];
@@ -433,6 +433,14 @@ export default function CompetitionAdminPage() {
       })
     );
     (event.target as HTMLFormElement).reset();
+  }
+
+  async function deleteAnnouncement(announcementId: string) {
+    await run("Announcement deleted", () =>
+      apiFetch(`/api/admin/competitions/${competitionId}/announcements/${announcementId}`, {
+        method: "DELETE"
+      })
+    );
   }
 
   async function setTransferWindow(active: boolean) {
@@ -1140,32 +1148,64 @@ export default function CompetitionAdminPage() {
 
       {/* ── Announcements ────────────────────────────────────── */}
       {tab === "announcements" && (
-        <div className="card" style={{ maxWidth: 560 }}>
-          <div className="card-title">Create Announcement</div>
-          <form style={{ display: "grid", gap: "14px" }} onSubmit={createAnnouncement}>
-            <div className="grid-2">
-              <div className="form-group">
-                <label className="form-label">Title (optional)</label>
-                <input className="form-input" name="title" placeholder="e.g. Scoring published!" />
+        <div style={{ display: "grid", gap: "20px", maxWidth: 600 }}>
+          {/* Existing announcements */}
+          {(data?.announcements.length ?? 0) > 0 && (
+            <div className="card">
+              <div className="card-title">Active Announcements</div>
+              <div style={{ display: "grid", gap: "10px" }}>
+                {data!.announcements.map((a) => (
+                  <div key={a.id} style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "12px", background: "var(--surface-2)", borderRadius: "8px", border: a.priority === "high" ? "1px solid var(--accent)" : "1px solid var(--border)" }}>
+                    {a.icon && <span style={{ fontSize: "20px", flexShrink: 0 }}>{a.icon}</span>}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {a.title && <div style={{ fontWeight: 600, marginBottom: "2px" }}>{a.title}</div>}
+                      <div style={{ color: "var(--text-2)", fontSize: "14px" }}>{a.message}</div>
+                      <div style={{ color: "var(--text-3)", fontSize: "12px", marginTop: "4px" }}>
+                        {a.priority === "high" && <span style={{ color: "var(--accent)", marginRight: "8px" }}>HIGH</span>}
+                        {new Date(a.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-danger"
+                      style={{ padding: "4px 10px", fontSize: "12px", flexShrink: 0 }}
+                      onClick={() => deleteAnnouncement(a.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Create form */}
+          <div className="card">
+            <div className="card-title">Create Announcement</div>
+            <form style={{ display: "grid", gap: "14px" }} onSubmit={createAnnouncement}>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Title (optional)</label>
+                  <input className="form-input" name="title" placeholder="e.g. Scoring published!" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Icon (emoji, optional)</label>
+                  <input className="form-input" name="icon" placeholder="e.g. ⚽" />
+                </div>
               </div>
               <div className="form-group">
-                <label className="form-label">Icon (emoji, optional)</label>
-                <input className="form-input" name="icon" placeholder="e.g. ⚽" />
+                <label className="form-label required">Message</label>
+                <textarea className="form-input" name="message" required rows={3} placeholder="Enter announcement text…" style={{ resize: "vertical" }} />
               </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label required">Message</label>
-              <textarea className="form-input" name="message" required rows={3} placeholder="Enter announcement text…" style={{ resize: "vertical" }} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Priority</label>
-              <select className="form-input" name="priority" defaultValue="normal">
-                <option value="normal">Normal</option>
-                <option value="high">High (highlighted)</option>
-              </select>
-            </div>
-            <div><button className="btn" type="submit">Post announcement</button></div>
-          </form>
+              <div className="form-group">
+                <label className="form-label">Priority</label>
+                <select className="form-input" name="priority" defaultValue="normal">
+                  <option value="normal">Normal</option>
+                  <option value="high">High (highlighted)</option>
+                </select>
+              </div>
+              <div><button className="btn" type="submit">Post announcement</button></div>
+            </form>
+          </div>
         </div>
       )}
     </div>
