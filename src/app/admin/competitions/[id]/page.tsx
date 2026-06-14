@@ -145,6 +145,8 @@ export default function CompetitionAdminPage() {
   const [bulkCsvFile, setBulkCsvFile] = useState<File | null>(null);
   const [plImporting, setPlImporting] = useState(false);
   const [plResult, setPlResult] = useState<string | null>(null);
+  const [syncingIds, setSyncingIds] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [selectedLeague, setSelectedLeague] = useState("PL");
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -256,6 +258,23 @@ export default function CompetitionAdminPage() {
       setPlResult(err instanceof Error ? err.message : "Import failed.");
     } finally {
       setPlImporting(false);
+    }
+  }
+
+  async function syncFixtureIds() {
+    setSyncingIds(true); setSyncResult(null);
+    try {
+      const r = await apiFetch<{ total: number; matched: number; alreadyMapped: number; unmatched: number; unmatchedList: string[] }>(
+        `/api/admin/competitions/${competitionId}/sync-fixture-ids`,
+        { method: "POST" }
+      );
+      const msg = `Mapped ${r.matched} fixtures. Already mapped: ${r.alreadyMapped}. Unmatched: ${r.unmatched}.` +
+        (r.unmatchedList.length ? ` Unmatched: ${r.unmatchedList.join(", ")}` : "");
+      setSyncResult(msg);
+    } catch (err) {
+      setSyncResult(`Error: ${err instanceof Error ? err.message : "Sync failed."}`);
+    } finally {
+      setSyncingIds(false);
     }
   }
 
@@ -654,6 +673,19 @@ export default function CompetitionAdminPage() {
               </div>
               <div><button className="btn" type="submit">Save changes</button></div>
             </form>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Sync API-Football Fixture IDs</div>
+            <p className="card-muted" style={{ marginBottom: "14px" }}>
+              Maps every fixture to its API-Football ID so stats can be fetched without fragile name matching. Run this once after importing a league.
+            </p>
+            <button className="btn" onClick={syncFixtureIds} disabled={syncingIds}>
+              {syncingIds ? "Syncing…" : "Sync fixture IDs"}
+            </button>
+            {syncResult && (
+              <p className={`notice ${syncResult.startsWith("Error") ? "notice-error" : ""}`} style={{ marginTop: "12px" }}>{syncResult}</p>
+            )}
           </div>
 
           <div className="card">

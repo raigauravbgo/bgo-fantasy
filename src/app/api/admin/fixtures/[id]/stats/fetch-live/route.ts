@@ -112,57 +112,68 @@ async function resolveMatchings(fixtureId: string, fixture: Fixture, apiKey: str
     `No API-Football league ID mapped for league code: ${leagueCode ?? "unknown"}.`, 400
   );
 
-  const utcDate = new Date(fixture.startTime).toISOString().slice(0, 10);
-  const nextDay = new Date(new Date(fixture.startTime).getTime() + 86_400_000).toISOString().slice(0, 10);
-  const datesToTry = Array.from(new Set([utcDate, nextDay]));
-  const season = new Date(fixture.startTime).getUTCFullYear();
+  // Use stored API-Football fixture ID if available (set by sync-fixture-ids).
+  // This bypasses all name matching — run sync first for reliable stats fetching.
+  const storedAfId = (fixture.providerIds as Record<string, string> | null)?.apifootball;
 
-  const allAfFixtures: AfFixture[] = [];
-  const queryErrors: string[] = [];
-  for (const d of datesToTry) {
-    try {
-      const dayFixtures = await afFetch<AfFixture[]>(`/fixtures?league=${leagueId}&season=${season}&date=${d}`, apiKey);
-      for (const f of dayFixtures) {
-        if (!allAfFixtures.some((x) => x.fixture.id === f.fixture.id)) allAfFixtures.push(f);
-      }
-    } catch (err) {
-      queryErrors.push(`${d}: ${err instanceof Error ? err.message : String(err)}`);
+  let afFixtureId: number;
+  if (storedAfId) {
+    afFixtureId = parseInt(storedAfId, 10);
+  } else {
+    // Fallback: fetch fixtures for this date and match by name.
+    // Run "Sync API-Football IDs" in admin to avoid this path.
+    const utcDate = new Date(fixture.startTime).toISOString().slice(0, 10);
+    const nextDay = new Date(new Date(fixture.startTime).getTime() + 86_400_000).toISOString().slice(0, 10);
+    const season = new Date(fixture.startTime).getUTCFullYear();
+
+    const allAfFixtures: AfFixture[] = [];
+    for (const d of [utcDate, nextDay]) {
+      try {
+        const dayFixtures = await afFetch<AfFixture[]>(`/fixtures?league=${leagueId}&season=${season}&date=${d}`, apiKey);
+        for (const f of dayFixtures) {
+          if (!allAfFixtures.some((x) => x.fixture.id === f.fixture.id)) allAfFixtures.push(f);
+        }
+      } catch { /* try next date */ }
     }
-  }
-  if (allAfFixtures.length === 0 && queryErrors.length === datesToTry.length) {
-    throw new RequestError(`API-Football returned no fixtures. Errors: ${queryErrors.join(" | ")}`, 502);
-  }
 
-  // Match by TLA first (most reliable — "USA" === "USA"), then fall back to
-  // normalized long name prefix matching ("Germany" ⊂ "Germany", etc.).
-  const tla1 = normName(fixture.team1ShortName ?? "");
-  const tla2 = normName(fixture.team2ShortName ?? "");
-  const t1 = normName(fixture.team1Name ?? "");
-  const t2 = normName(fixture.team2Name ?? "");
+    const tla1 = normName(fixture.team1ShortName ?? "");
+    const tla2 = normName(fixture.team2ShortName ?? "");
+    const t1 = normName(fixture.team1Name ?? "");
+    const t2 = normName(fixture.team2Name ?? "");
 
-  function teamMatches(afName: string, tla: string, longName: string): boolean {
-    const af = normName(afName);
-    if (tla && af === tla) return true;
-    if (longName && af === longName) return true;
-    const afFirst = af.split(" ")[0];
-    const lnFirst = longName.split(" ")[0];
-    return (afFirst.length > 2 && longName.includes(afFirst)) ||
-           (lnFirst.length > 2 && af.includes(lnFirst));
-  }
+    function teamMatches(afName: string, tla: string, longName: string): boolean {
+      const af = normName(afName);
+      if (tla && af === tla) return true;
+      if (longName && af === longName) return true;
+      const afFirst = af.split(" ")[0];
+      const lnFirst = longName.split(" ")[0];
+      return (afFirst.length > 2 && longName.includes(afFirst)) ||
+             (lnFirst.length > 2 && af.includes(lnFirst));
+    }
 
-  const matched = allAfFixtures.find((af) =>
-    teamMatches(af.teams.home.name, tla1, t1) &&
-    teamMatches(af.teams.away.name, tla2, t2)
-  );
-  if (!matched) {
-    const available = allAfFixtures.map((af) => `${af.teams.home.name} vs ${af.teams.away.name}`).join(", ");
-    throw new RequestError(
-      `Could not match fixture "${fixture.team1Name} vs ${fixture.team2Name}". Available: ${available || "none"}`, 404
+    const nameMatched = allAfFixtures.find((af) =>
+      teamMatches(af.teams.home.name, tla1, t1) &&
+      teamMatches(af.teams.away.name, tla2, t2)
     );
+    if (!nameMatched) {
+      const available = allAfFixtures.map((af) => `${af.teams.home.name} vs ${af.teams.away.name}`).join(", ");
+      throw new RequestError(
+        `Could not match fixture "${fixture.team1Name} vs ${fixture.team2Name}". Available: ${available || "none"}\n\nTip: run "Sync API-Football IDs" in admin to pre-map all fixtures and avoid this error.`, 404
+      );
+    }
+    afFixtureId = nameMatched.fixture.id;
+
+    // Store the matched ID so future fetches use it directly
+    await repo.fixtures.update(fixtureId, {
+      providerIds: { ...(fixture.providerIds as Record<string, string> ?? {}), apifootball: String(afFixtureId) }
+    });
   }
 
-  const afFixtureId = matched.fixture.id;
-  const ftScore = matched.score.fulltime;
+  // Fetch full fixture data (score + team IDs) by the resolved AF fixture ID
+  const [afFixtureData] = await afFetch<AfFixture[]>(`/fixtures?id=${afFixtureId}`, apiKey);
+  if (!afFixtureData) throw new RequestError(`API-Football fixture ${afFixtureId} not found`, 404);
+
+  const ftScore = afFixtureData.score.fulltime;
   const homeGoals = ftScore.home ?? 0;
   const awayGoals = ftScore.away ?? 0;
 
@@ -200,7 +211,7 @@ async function resolveMatchings(fixtureId: string, fixture: Fixture, apiKey: str
   const statItems: MatchResult["statItems"] = [];
 
   for (const group of teamStats) {
-    const isHome = group.team.id === matched.teams.home.id;
+    const isHome = group.team.id === afFixtureData.teams.home.id;
     const dbTeamId = isHome ? fixture.team1Id : fixture.team2Id;
     const cleanSheet = isHome ? awayGoals === 0 : homeGoals === 0;
 
