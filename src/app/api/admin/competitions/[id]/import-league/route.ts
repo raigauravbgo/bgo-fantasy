@@ -181,17 +181,29 @@ export async function POST(
       );
     }
 
+    // Build a lookup of existing fixtures by (team1Id, team2Id, startTime) so
+    // re-importing reuses the same row IDs instead of creating duplicates.
+    const existingFixtures = await repo.fixtures.list(competitionId);
+    const existingByKey = new Map(
+      existingFixtures.map((f) => [`${f.team1Id}|${f.team2Id}|${f.startTime.getTime()}`, f.id])
+    );
+
     const fixtureItems = rawMatches.map((m) => {
       const team1 = teamByTla.get(m.homeTeam.tla);
       const team2 = teamByTla.get(m.awayTeam.tla);
+      const team1Id = team1?.id ?? savedTeams[0].id;
+      const team2Id = team2?.id ?? savedTeams[1].id;
+      const startTime = new Date(m.utcDate);
+      const existingId = existingByKey.get(`${team1Id}|${team2Id}|${startTime.getTime()}`);
       return {
+        id: existingId,
         competitionId,
-        team1Id: team1?.id ?? savedTeams[0].id,
-        team2Id: team2?.id ?? savedTeams[1].id,
+        team1Id,
+        team2Id,
         team1Name: m.homeTeam.name,
         team2Name: m.awayTeam.name,
         status: m.status === "FINISHED" ? ("completed" as const) : m.status === "IN_PLAY" ? ("live" as const) : ("upcoming" as const),
-        startTime: new Date(m.utcDate),
+        startTime,
         venue: m.venue ?? undefined
       };
     }).filter((f) => f.team1Id !== f.team2Id);
