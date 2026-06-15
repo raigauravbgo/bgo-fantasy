@@ -165,4 +165,5 @@ export type DashboardData = {
   fixturePoints?: Array<{ fixtureId: string; points: number }>;
   lastFixture?: Fixture | null;
   lastMatchPoints?: number | null;
+  activePredictionCount?: number;
 };

@@ -303,6 +303,43 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
+      {/* Active predictions banner */}
+      {(data?.activePredictionCount ?? 0) > 0 && (
+        <motion.a
+          href="/predictions"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.2 }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            padding: "14px 18px",
+            marginBottom: 16,
+            background: "linear-gradient(135deg, hsl(var(--accent) / 0.15), hsl(var(--accent) / 0.05))",
+            border: "1px solid hsl(var(--accent) / 0.4)",
+            borderRadius: "12px",
+            textDecoration: "none",
+            color: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "22px" }}>🔮</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>
+                Predictions open — {data!.activePredictionCount} {data!.activePredictionCount === 1 ? "match" : "matches"}
+              </div>
+              <div style={{ fontSize: "0.8rem", color: "hsl(var(--ink-muted))" }}>
+                Make your predictions before kick-off to earn bonus points
+              </div>
+            </div>
+          </div>
+          <span style={{ fontSize: "1.2rem", color: "hsl(var(--accent))", flexShrink: 0 }}>→</span>
+        </motion.a>
+      )}
+
       {/* Budget bar — only if entry exists */}
       {data?.entry && (
         <motion.div

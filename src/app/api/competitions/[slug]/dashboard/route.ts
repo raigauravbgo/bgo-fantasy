@@ -9,14 +9,15 @@ export async function GET(
     const user = await requireUser();
     const { slug } = await context.params;
     const { repo, competition } = await resolveCompetition(slug);
-    const [entry, entries, fixtures, entryPoints, predictionResults, announcements] =
+    const [entry, entries, fixtures, entryPoints, predictionResults, announcements, activePredSets] =
       await Promise.all([
         repo.entries.findByUser(competition.id, user.id),
         repo.entries.list(competition.id),
         repo.fixtures.list(competition.id),
         repo.points.listEntryPoints(competition.id),
         repo.predictions.listResults(competition.id),
-        repo.announcements.listActive(competition.id)
+        repo.announcements.listActive(competition.id),
+        repo.predictions.listActive(competition.id)
       ]);
 
     const squadPlayers = entry?.playerIds?.length
@@ -69,7 +70,8 @@ export async function GET(
       squadPlayers,
       fixturePoints,
       lastFixture,
-      lastMatchPoints
+      lastMatchPoints,
+      activePredictionCount: activePredSets.length
     });
   } catch (error) {
     return handleApiError(error);
