@@ -188,25 +188,33 @@ export async function POST(
       existingFixtures.map((f) => [`${f.team1Id}|${f.team2Id}|${f.startTime.getTime()}`, f.id])
     );
 
-    const fixtureItems = rawMatches.map((m) => {
+    const skippedFixtures: Array<{ home: string; away: string; date: string; reason: string }> = [];
+    const fixtureItems = rawMatches.flatMap((m) => {
       const team1 = teamByTla.get(m.homeTeam.tla);
       const team2 = teamByTla.get(m.awayTeam.tla);
-      const team1Id = team1?.id ?? savedTeams[0].id;
-      const team2Id = team2?.id ?? savedTeams[1].id;
+      if (!team1 || !team2) {
+        skippedFixtures.push({
+          home: m.homeTeam.name,
+          away: m.awayTeam.name,
+          date: m.utcDate,
+          reason: `Unknown TLA: ${!team1 ? m.homeTeam.tla : ""}${!team1 && !team2 ? ", " : ""}${!team2 ? m.awayTeam.tla : ""}`,
+        });
+        return [];
+      }
       const startTime = new Date(m.utcDate);
-      const existingId = existingByKey.get(`${team1Id}|${team2Id}|${startTime.getTime()}`);
-      return {
+      const existingId = existingByKey.get(`${team1.id}|${team2.id}|${startTime.getTime()}`);
+      return [{
         id: existingId,
         competitionId,
-        team1Id,
-        team2Id,
+        team1Id: team1.id,
+        team2Id: team2.id,
         team1Name: m.homeTeam.name,
         team2Name: m.awayTeam.name,
         status: m.status === "FINISHED" ? ("completed" as const) : m.status === "IN_PLAY" ? ("live" as const) : ("upcoming" as const),
         startTime,
         venue: m.venue ?? undefined
-      };
-    }).filter((f) => f.team1Id !== f.team2Id);
+      }];
+    });
 
     const savedFixtures = await repo.fixtures.upsertMany(fixtureItems);
 
@@ -221,13 +229,14 @@ export async function POST(
       action: `import.${leagueCode.toLowerCase()}`,
       entityType: "competition",
       entityId: competitionId,
-      after: { leagueCode, teams: savedTeams.length, players: savedPlayers.length, fixtures: savedFixtures.length }
+      after: { leagueCode, teams: savedTeams.length, players: savedPlayers.length, fixtures: savedFixtures.length, skipped: skippedFixtures.length }
     });
 
     return json({
       leagueCode,
       leagueName: league.name,
-      imported: { teams: savedTeams.length, players: savedPlayers.length, fixtures: savedFixtures.length }
+      imported: { teams: savedTeams.length, players: savedPlayers.length, fixtures: savedFixtures.length },
+      ...(skippedFixtures.length > 0 && { skippedFixtures })
     });
   } catch (error) {
     return handleApiError(error);

@@ -248,11 +248,19 @@ export default function CompetitionAdminPage() {
   async function importLeague() {
     setPlImporting(true); setPlResult(null);
     try {
-      const result = await apiFetch<{ leagueName: string; imported: { teams: number; players: number; fixtures: number } }>(
+      const result = await apiFetch<{
+        leagueName: string;
+        imported: { teams: number; players: number; fixtures: number };
+        skippedFixtures?: Array<{ home: string; away: string; date: string; reason: string }>;
+      }>(
         `/api/admin/competitions/${competitionId}/import-league`,
         { method: "POST", body: { leagueCode: selectedLeague } }
       );
-      setPlResult(`${result.leagueName} — ${result.imported.teams} teams, ${result.imported.players} players, ${result.imported.fixtures} fixtures.`);
+      let msg = `${result.leagueName} — ${result.imported.teams} teams, ${result.imported.players} players, ${result.imported.fixtures} fixtures.`;
+      if (result.skippedFixtures?.length) {
+        msg += ` ⚠️ ${result.skippedFixtures.length} fixtures skipped (unknown teams): ${result.skippedFixtures.map((f) => `${f.home} vs ${f.away}`).join(", ")}`;
+      }
+      setPlResult(msg);
       void loadOverview();
     } catch (err) {
       setPlResult(err instanceof Error ? err.message : "Import failed.");
