@@ -137,7 +137,7 @@ export function platformRepository() {
         } as unknown as Fixture) : null;
       },
       async upsertMany(items: Array<Omit<Fixture, "id"> & { id?: string }>) {
-        const docs = items.map((item) => ({ id: item.id ?? newId(), ...item }));
+        const docs = items.map((item) => ({ ...item, id: item.id ?? newId() }));
         await Promise.all(
           docs.map((f) =>
             prisma.fixture.upsert({
