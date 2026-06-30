@@ -154,8 +154,10 @@ export async function POST(
 
     const savedPlayers = await repo.players.upsertMany(playerItems);
 
-    // 3. Fetch upcoming fixtures (SCHEDULED + TIMED) — no fallback to historical
-    const [scheduledRes, timedRes] = await Promise.all([
+    // 3. Fetch all fixtures: upcoming (SCHEDULED + TIMED) + finished (FINISHED)
+    //    Finished fixtures are included so re-imports after knockout rounds start
+    //    can recover any completed matches that were missing or had placeholder teams.
+    const [scheduledRes, timedRes, finishedRes] = await Promise.all([
       fdFetch<{ matches: FdMatch[] }>(
         `/competitions/${leagueCode}/matches?status=SCHEDULED&season=${league.season}`,
         apiKey
@@ -163,20 +165,24 @@ export async function POST(
       fdFetch<{ matches: FdMatch[] }>(
         `/competitions/${leagueCode}/matches?status=TIMED&season=${league.season}`,
         apiKey
+      ),
+      fdFetch<{ matches: FdMatch[] }>(
+        `/competitions/${leagueCode}/matches?status=FINISHED&season=${league.season}`,
+        apiKey
       )
     ]);
 
-    // Deduplicate by utcDate + home team
+    // Deduplicate by utcDate + home team across all three sets
     const seen = new Set<string>();
     const rawMatches: FdMatch[] = [];
-    for (const m of [...scheduledRes.matches, ...timedRes.matches]) {
+    for (const m of [...scheduledRes.matches, ...timedRes.matches, ...finishedRes.matches]) {
       const key = `${m.utcDate}|${m.homeTeam.tla}`;
       if (!seen.has(key)) { seen.add(key); rawMatches.push(m); }
     }
 
     if (rawMatches.length === 0) {
       throw new RequestError(
-        `No upcoming fixtures found for ${league.name} (season ${league.season}). The season may not have started yet or may be on a break. Check back later.`,
+        `No fixtures found for ${league.name} (season ${league.season}). The season may not have started yet or may be on a break. Check back later.`,
         404
       );
     }
