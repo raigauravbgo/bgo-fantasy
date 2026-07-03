@@ -55,6 +55,12 @@ export async function POST(
       throw new RequestError("Locked squads cannot be edited outside a transfer window", 403);
     }
 
+    if (existing?.locked && transferWindow?.active && transferWindow.closesAt) {
+      if (new Date() > new Date(transferWindow.closesAt)) {
+        throw new RequestError("Transfer window has closed", 403);
+      }
+    }
+
     const players = await repo.players.findMany(input.playerIds);
     const constraints = {
       ...soccerAdapter.squadConstraints,

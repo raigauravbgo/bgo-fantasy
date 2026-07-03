@@ -548,28 +548,43 @@ export default function DashboardPage() {
             </div>
           ) : null}
 
-          {competition.settings?.transferWindow?.active ? (
-            <div className="card" style={{ borderColor: "var(--warn)" }}>
-              <div className="card-title">Transfer Window Open</div>
-              <p style={{ color: "var(--muted)", fontSize: "0.875rem" }}>
-                You can make up to{" "}
-                <strong>
-                  {competition.settings.transferWindow.maxTransfers}
-                </strong>{" "}
-                transfers.
-                {data?.entry
-                  ? ` You have used ${data.entry.transferUsage} so far.`
-                  : ""}
-              </p>
-              <Link
-                className="btn-outline"
-                href="/squad"
-                style={{ display: "block", textAlign: "center", marginTop: "12px" }}
-              >
-                Make transfers
-              </Link>
-            </div>
-          ) : null}
+          {competition.settings?.transferWindow?.active ? (() => {
+            const tw = competition.settings.transferWindow;
+            const used = data?.entry?.transferUsage ?? 0;
+            const remaining = tw.maxTransfers - used;
+            let countdown: string | null = null;
+            if (tw.closesAt) {
+              const msLeft = new Date(tw.closesAt).getTime() - Date.now();
+              if (msLeft > 0) {
+                const hrs = Math.floor(msLeft / 3_600_000);
+                const mins = Math.floor((msLeft % 3_600_000) / 60_000);
+                countdown = hrs > 0 ? `${hrs}h ${mins}m remaining` : `${mins}m remaining`;
+              } else {
+                countdown = "Closing soon";
+              }
+            }
+            return (
+              <div className="card" style={{ borderColor: "var(--warn)" }}>
+                <div className="card-title">Transfer Window Open</div>
+                <p style={{ color: "var(--muted)", fontSize: "0.875rem" }}>
+                  You have used <strong>{used}</strong> of <strong>{tw.maxTransfers}</strong> transfers
+                  {remaining > 0 ? ` — ${remaining} remaining.` : " — no transfers left."}
+                </p>
+                {countdown && (
+                  <p style={{ color: "var(--warn)", fontSize: "0.8rem", marginTop: "6px", fontWeight: 600 }}>
+                    ⏱ {countdown}
+                  </p>
+                )}
+                <Link
+                  className="btn-outline"
+                  href="/squad"
+                  style={{ display: "block", textAlign: "center", marginTop: "12px" }}
+                >
+                  Make transfers
+                </Link>
+              </div>
+            );
+          })() : null}
         </div>
       </div>
     </div>

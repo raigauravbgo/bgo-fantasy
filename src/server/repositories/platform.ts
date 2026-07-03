@@ -182,6 +182,13 @@ export function platformRepository() {
           update: { ...input, updatedAt: now },
           create: { id, ...input, createdAt: now, updatedAt: now }
         }) as Promise<FantasyEntry>;
+      },
+      async resetTransferUsage(competitionId: string) {
+        const { count } = await prisma.fantasyEntry.updateMany({
+          where: { competitionId },
+          data: { transferUsage: 0 }
+        });
+        return count;
       }
     },
 

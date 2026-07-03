@@ -470,11 +470,14 @@ export default function CompetitionAdminPage() {
     );
   }
 
-  async function setTransferWindow(active: boolean) {
+  const [twCount, setTwCount] = useState(3);
+  const [twHours, setTwHours] = useState(24);
+
+  async function setTransferWindow(active: boolean, resetUsage = false) {
     await run(`Transfer window ${active ? "opened" : "closed"}`, () =>
       apiFetch(`/api/admin/competitions/${competitionId}/transfer-window`, {
         method: "POST",
-        body: { active, maxTransfers: 3 }
+        body: { active, maxTransfers: twCount, durationHours: active ? twHours : undefined, resetUsage }
       })
     );
   }
@@ -1072,15 +1075,46 @@ export default function CompetitionAdminPage() {
 
       {/* ── Transfers ────────────────────────────────────────── */}
       {tab === "transfers" && (
-        <div className="card" style={{ maxWidth: 480 }}>
+        <div className="card" style={{ maxWidth: 520 }}>
           <div className="card-title">Transfer Window</div>
           <p style={{ marginBottom: "16px", fontSize: "0.875rem" }}>
-            Opening a transfer window lets locked players make squad changes (up to 3 per window).
+            Opening a transfer window lets locked players make squad changes within the set limits.
           </p>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button className="btn" onClick={() => setTransferWindow(true)}>Open window (3 transfers)</button>
-            <button className="btn-outline" style={{ borderColor: "hsl(var(--danger))", color: "hsl(var(--danger))" }} onClick={() => setTransferWindow(false)}>Close window</button>
+          <div style={{ display: "flex", gap: "16px", marginBottom: "20px", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.875rem" }}>
+              Max transfers (1–15)
+              <input
+                type="number" min={1} max={15} value={twCount}
+                onChange={(e) => setTwCount(Math.min(15, Math.max(1, Number(e.target.value))))}
+                className="form-input" style={{ width: 80 }}
+              />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.875rem" }}>
+              Window duration (hours)
+              <input
+                type="number" min={1} max={168} value={twHours}
+                onChange={(e) => setTwHours(Math.min(168, Math.max(1, Number(e.target.value))))}
+                className="form-input" style={{ width: 80 }}
+              />
+            </label>
           </div>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button className="btn" onClick={() => setTransferWindow(true)} disabled={!!running}>
+              Open window
+            </button>
+            <button className="btn" onClick={() => setTransferWindow(true, true)} disabled={!!running}
+              style={{ background: "hsl(var(--accent))" }}>
+              Re-open for new round
+            </button>
+            <button className="btn-outline" disabled={!!running}
+              style={{ borderColor: "hsl(var(--danger))", color: "hsl(var(--danger))" }}
+              onClick={() => setTransferWindow(false)}>
+              Close window
+            </button>
+          </div>
+          <p style={{ marginTop: "12px", fontSize: "0.8rem", color: "var(--muted)" }}>
+            &ldquo;Re-open for new round&rdquo; resets every player&apos;s transfer usage back to 0.
+          </p>
         </div>
       )}
 
