@@ -407,9 +407,7 @@ export default function SquadPage() {
           background: "rgba(0,0,0,0.65)", borderRadius: "3px", padding: "1px 5px",
           fontVariantNumeric: "tabular-nums"
         }}>
-          {pts != null && pts !== 0
-            ? <span style={{ color: pts > 0 ? "#4ade80" : "#f87171" }}>{pts % 1 ? pts.toFixed(1) : pts}pts</span>
-            : `£${player.price}m`}
+          {`£${player.price}m`}
         </div>
 
         {/* Actions */}
