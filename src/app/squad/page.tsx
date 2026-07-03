@@ -120,7 +120,10 @@ export default function SquadPage() {
     () => validateSquad(selectedPlayers, captainId, vcId, budget, maxPerTeam, squadSize),
     [selectedPlayers, captainId, vcId, budget, maxPerTeam, squadSize]
   );
-  const isLocked = !!(entry?.locked && !competition?.settings?.transferWindow?.active);
+  const tw = competition?.settings?.transferWindow;
+  const transfersRemaining = tw?.active ? Math.max(0, (tw.maxTransfers ?? 0) - (entry?.transferUsage ?? 0)) : 0;
+  const isInTransferMode = !!(entry?.locked && tw?.active && transfersRemaining > 0);
+  const isLocked = !!(entry?.locked && !isInTransferMode);
   const bankLeft = budget - budgetUsed;
 
   const squadByPos = useMemo(() => {
@@ -578,7 +581,9 @@ export default function SquadPage() {
 
       {isLocked && (
         <p className="notice" style={{ marginBottom: "8px", fontSize: "0.8rem" }}>
-          Squad locked — transfers open when admin opens a window.
+          {tw?.active && transfersRemaining === 0
+            ? `All ${tw.maxTransfers} transfers used — squad locked until next window.`
+            : "Squad locked — transfers open when admin opens a window."}
         </p>
       )}
 
@@ -642,20 +647,32 @@ export default function SquadPage() {
       {/* Actions */}
       {!isLocked && (
         <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
-          <button className="btn-outline" style={{ flex: 1 }} disabled={saving} onClick={() => saveSquad(false)}>
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <button
-            className="btn" style={{ flex: 1 }}
-            disabled={saving || errors.length > 0}
-            onClick={() => {
-              if (confirm("Lock your squad? You won't be able to change it without a transfer window.")) {
-                void saveSquad(true);
-              }
-            }}
-          >
-            {saving ? "…" : "Lock squad"}
-          </button>
+          {isInTransferMode ? (
+            <button
+              className="btn" style={{ flex: 1 }}
+              disabled={saving || errors.length > 0}
+              onClick={() => saveSquad(false)}
+            >
+              {saving ? "Saving…" : `Save transfers (${transfersRemaining} left)`}
+            </button>
+          ) : (
+            <>
+              <button className="btn-outline" style={{ flex: 1 }} disabled={saving} onClick={() => saveSquad(false)}>
+                {saving ? "Saving…" : "Save"}
+              </button>
+              <button
+                className="btn" style={{ flex: 1 }}
+                disabled={saving || errors.length > 0}
+                onClick={() => {
+                  if (confirm("Lock your squad? You won't be able to change it without a transfer window.")) {
+                    void saveSquad(true);
+                  }
+                }}
+              >
+                {saving ? "…" : "Lock squad"}
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
