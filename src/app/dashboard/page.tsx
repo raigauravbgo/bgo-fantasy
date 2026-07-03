@@ -225,6 +225,85 @@ export default function DashboardPage() {
 
       {error ? <p className="notice notice-error">{error}</p> : null}
 
+      {/* Transfer window banner — pinned at top, always visible on mobile */}
+      {competition.settings?.transferWindow?.active && (() => {
+        const tw = competition.settings.transferWindow;
+        const used = data?.entry?.transferUsage ?? 0;
+        const remaining = tw.maxTransfers - used;
+        let countdown: string | null = null;
+        if (tw.closesAt) {
+          const msLeft = new Date(tw.closesAt).getTime() - Date.now();
+          if (msLeft > 0) {
+            const hrs = Math.floor(msLeft / 3_600_000);
+            const mins = Math.floor((msLeft % 3_600_000) / 60_000);
+            countdown = hrs > 0 ? `${hrs}h ${mins}m remaining` : `${mins}m remaining`;
+          } else {
+            countdown = "Closing soon";
+          }
+        }
+        return (
+          <>
+            <style>{`
+              @keyframes tw-glow {
+                0%, 100% { box-shadow: 0 0 0 0 hsl(142 60% 45% / 0.5), 0 2px 16px hsl(142 60% 45% / 0.15); }
+                50%       { box-shadow: 0 0 0 5px hsl(142 60% 45% / 0), 0 4px 32px hsl(142 60% 45% / 0.35); }
+              }
+              @keyframes tw-shimmer {
+                0%   { transform: translateX(-100%); }
+                100% { transform: translateX(200%); }
+              }
+              .tw-banner { animation: tw-glow 2s ease-in-out infinite; }
+              .tw-shimmer { animation: tw-shimmer 2.4s ease-in-out infinite; }
+            `}</style>
+            <motion.a
+              href="/squad"
+              className="tw-banner"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "14px 18px",
+                marginBottom: 16,
+                background: "linear-gradient(135deg, hsl(142 55% 38% / 0.18) 0%, hsl(142 60% 50% / 0.08) 100%)",
+                border: "2px solid hsl(142 55% 42%)",
+                borderRadius: 14,
+                textDecoration: "none",
+                color: "inherit",
+                cursor: "pointer",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              {/* shimmer sweep */}
+              <div className="tw-shimmer" style={{
+                position: "absolute", top: 0, bottom: 0, width: "40%",
+                background: "linear-gradient(90deg, transparent, hsl(142 80% 85% / 0.18), transparent)",
+                pointerEvents: "none",
+              }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative" }}>
+                <span style={{ fontSize: 26, lineHeight: 1 }}>🔄</span>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: "0.97rem", color: "hsl(142 55% 36%)" }}>
+                    Transfer Window Open
+                  </div>
+                  <div style={{ fontSize: "0.8rem", color: "hsl(var(--ink-muted))", marginTop: 2 }}>
+                    {remaining > 0
+                      ? `${remaining} transfer${remaining !== 1 ? "s" : ""} remaining (${used} of ${tw.maxTransfers} used)`
+                      : `All ${tw.maxTransfers} transfers used`}
+                    {countdown ? ` · ⏱ ${countdown}` : ""}
+                  </div>
+                </div>
+              </div>
+              <span style={{ fontSize: "1.2rem", color: "hsl(142 55% 42%)", flexShrink: 0, position: "relative" }}>→</span>
+            </motion.a>
+          </>
+        );
+      })()}
+
       {/* Stat tiles */}
       <div className="stat-tiles">
         {/* Rank — prominent */}
@@ -548,43 +627,6 @@ export default function DashboardPage() {
             </div>
           ) : null}
 
-          {competition.settings?.transferWindow?.active ? (() => {
-            const tw = competition.settings.transferWindow;
-            const used = data?.entry?.transferUsage ?? 0;
-            const remaining = tw.maxTransfers - used;
-            let countdown: string | null = null;
-            if (tw.closesAt) {
-              const msLeft = new Date(tw.closesAt).getTime() - Date.now();
-              if (msLeft > 0) {
-                const hrs = Math.floor(msLeft / 3_600_000);
-                const mins = Math.floor((msLeft % 3_600_000) / 60_000);
-                countdown = hrs > 0 ? `${hrs}h ${mins}m remaining` : `${mins}m remaining`;
-              } else {
-                countdown = "Closing soon";
-              }
-            }
-            return (
-              <div className="card" style={{ borderColor: "var(--warn)" }}>
-                <div className="card-title">Transfer Window Open</div>
-                <p style={{ color: "var(--muted)", fontSize: "0.875rem" }}>
-                  You have used <strong>{used}</strong> of <strong>{tw.maxTransfers}</strong> transfers
-                  {remaining > 0 ? ` — ${remaining} remaining.` : " — no transfers left."}
-                </p>
-                {countdown && (
-                  <p style={{ color: "var(--warn)", fontSize: "0.8rem", marginTop: "6px", fontWeight: 600 }}>
-                    ⏱ {countdown}
-                  </p>
-                )}
-                <Link
-                  className="btn-outline"
-                  href="/squad"
-                  style={{ display: "block", textAlign: "center", marginTop: "12px" }}
-                >
-                  Make transfers
-                </Link>
-              </div>
-            );
-          })() : null}
         </div>
       </div>
     </div>
