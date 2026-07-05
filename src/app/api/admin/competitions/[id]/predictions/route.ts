@@ -19,7 +19,7 @@ export async function GET(
     const fixtureMap = new Map(fixtures.map((f) => [f.id, f]));
 
     const predictionSets = sets.map((set) => {
-      const fixture = fixtureMap.get(set.fixtureId);
+      const fixture = set.fixtureId ? fixtureMap.get(set.fixtureId) : undefined;
       const setPreds = allPredictions.filter((p) => p.predictionSetId === set.id);
       const totalResponses = new Set(setPreds.map((p) => p.userId)).size;
 

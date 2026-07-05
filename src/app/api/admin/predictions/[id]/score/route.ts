@@ -1,9 +1,16 @@
-import { handleApiError, json, requireAdminUser, RequestError } from "@/server/api/http";
+import { type NextRequest } from "next/server";
+import { z } from "zod";
+
+import { handleApiError, json, parseJson, requireAdminUser, RequestError } from "@/server/api/http";
 import { platformRepository } from "@/server/repositories/platform";
-import { scorePredictionSet } from "@/server/services/predictions";
+import { scoreBumperPrediction, scorePredictionSet } from "@/server/services/predictions";
+
+const bumperScoreSchema = z.object({
+  correctValues: z.record(z.string(), z.string())
+});
 
 export async function POST(
-  _request: Request,
+  request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -12,11 +19,19 @@ export async function POST(
     const repo = platformRepository();
     const set = await repo.predictions.findSet(id);
     if (!set) throw new RequestError("Prediction set not found", 404);
-    const fixture = await repo.fixtures.findById(set.fixtureId);
-    if (!fixture) throw new RequestError("Fixture not found", 404);
 
     const predictions = await repo.predictions.listUserPredictions(set.competitionId);
-    const results = scorePredictionSet({ set, fixture, predictions });
+    let results;
+
+    if (set.type === "bumper" || !set.fixtureId) {
+      const input = await parseJson(request, bumperScoreSchema);
+      results = scoreBumperPrediction({ set, correctValues: input.correctValues, predictions });
+    } else {
+      const fixture = await repo.fixtures.findById(set.fixtureId);
+      if (!fixture) throw new RequestError("Fixture not found", 404);
+      results = scorePredictionSet({ set, fixture, predictions });
+    }
+
     await repo.predictions.replaceResults(set.competitionId, set.id, results);
     await repo.predictions.upsertSet({ ...set, status: "scored" });
     await repo.audit.create({

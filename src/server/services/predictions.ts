@@ -12,7 +12,7 @@ export type FixtureStats = {
 export type PredictionQuestion = {
   id: string;
   prompt: string;
-  type?: "match_winner" | "btts" | "over_under_2_5" | "exact_score" | "red_card";
+  type?: "match_winner" | "btts" | "over_under_2_5" | "exact_score" | "red_card" | "champion" | "golden_boot" | "final_score";
   voteMode?: "fixed" | "dynamic";
   points: number;      // max displayable (or exact for fixed)
   basePoints?: number; // dynamic formula base
@@ -175,6 +175,49 @@ export function scorePredictionSet(input: {
           pts = dynamicPoints(q.basePoints, q.minPoints ?? 2, q.maxPoints ?? 50, fraction);
         } else {
           pts = q.points ?? 0;
+        }
+      }
+      results.push({
+        id: newId(),
+        competitionId: pred.competitionId,
+        predictionSetId: set.id,
+        questionId: q.id,
+        userId: pred.userId,
+        pointsAwarded: pts,
+      });
+    }
+  }
+
+  return results;
+}
+
+// Score a bumper prediction set (champion/golden_boot/final_score).
+// Admin provides the correct answer per question; points are fixed.
+export function scoreBumperPrediction(input: {
+  set: PredictionSet;
+  correctValues: Record<string, string>; // questionId → correct value
+  predictions: UserPrediction[];
+}): PredictionResult[] {
+  const { set, correctValues, predictions } = input;
+  const setPreds = predictions.filter((p) => p.predictionSetId === set.id);
+  const results: PredictionResult[] = [];
+
+  for (const q of set.questions as unknown as PredictionQuestion[]) {
+    const correctValue = correctValues[q.id];
+    if (correctValue == null) continue;
+
+    const qPreds = setPreds.filter((p) => p.questionId === q.id);
+
+    for (const pred of qPreds) {
+      let pts = 0;
+      if (pred.value === correctValue) {
+        pts = q.points;
+      } else if (q.type === "final_score") {
+        // off-by-1 on total goal count gets half points
+        const guessed = parseInt(pred.value, 10);
+        const correct = parseInt(correctValue, 10);
+        if (!isNaN(guessed) && !isNaN(correct) && Math.abs(guessed - correct) === 1) {
+          pts = Math.floor(q.points / 4); // 200 pts → 50 pts
         }
       }
       results.push({

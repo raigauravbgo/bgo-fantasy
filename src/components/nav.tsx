@@ -13,7 +13,8 @@ const PLAYER_LINKS = [
   { href: "/squad", label: "My Squad" },
   { href: "/fixtures", label: "Fixtures" },
   { href: "/leaderboard", label: "Leaderboard" },
-  { href: "/predictions", label: "Predictions" }
+  { href: "/predictions", label: "Predictions" },
+  { href: "/bumper", label: "🏆 Bumper" }
 ];
 
 const ADMIN_LINK = { href: "/admin", label: "Admin" };

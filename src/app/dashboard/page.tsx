@@ -254,6 +254,16 @@ export default function DashboardPage() {
               }
               .tw-banner { animation: tw-glow 2s ease-in-out infinite; }
               .tw-shimmer { animation: tw-shimmer 2.4s ease-in-out infinite; }
+              @keyframes bumper-glow {
+                0%, 100% { box-shadow: 0 0 0 0 hsl(45 100% 55% / 0.4), 0 4px 24px hsl(45 100% 55% / 0.15); }
+                50% { box-shadow: 0 0 0 6px hsl(45 100% 55% / 0), 0 4px 32px hsl(45 100% 55% / 0.3); }
+              }
+              @keyframes bumper-shimmer {
+                0% { transform: translateX(-100%) skewX(-15deg); }
+                100% { transform: translateX(250%) skewX(-15deg); }
+              }
+              .bumper-banner { animation: bumper-glow 2.2s ease-in-out infinite; }
+              .bumper-shimmer { animation: bumper-shimmer 2.8s ease-in-out infinite; }
             `}</style>
             <motion.a
               href="/squad"
@@ -381,6 +391,57 @@ export default function DashboardPage() {
           </div>
         </motion.div>
       </div>
+
+      {/* Bumper predictions banner */}
+      {(data?.activeBumperCount ?? 0) > 0 && (
+        <motion.a
+          href="/bumper"
+          className="bumper-banner"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.13, duration: 0.2 }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            padding: "14px 20px",
+            marginBottom: 12,
+            background: "linear-gradient(135deg, hsl(45 100% 55% / 0.18), hsl(38 100% 50% / 0.08))",
+            border: "1px solid hsl(45 100% 55% / 0.5)",
+            borderRadius: "14px",
+            textDecoration: "none",
+            color: "inherit",
+            cursor: "pointer",
+            overflow: "hidden",
+            position: "relative",
+          }}
+        >
+          {/* Shimmer overlay */}
+          <div
+            className="bumper-shimmer"
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "linear-gradient(90deg, transparent 0%, hsl(45 100% 80% / 0.2) 50%, transparent 100%)",
+              width: "40%",
+              pointerEvents: "none",
+            }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", position: "relative" }}>
+            <span style={{ fontSize: "26px" }}>🏆</span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: "1rem", color: "hsl(45 100% 60%)" }}>
+                Bumper Predictions — Win up to 400 pts!
+              </div>
+              <div style={{ fontSize: "0.8rem", color: "hsl(var(--ink-muted))", marginTop: 2 }}>
+                Champion · Golden Boot · Final Score — all closing before QF
+              </div>
+            </div>
+          </div>
+          <span style={{ fontSize: "1.3rem", color: "hsl(45 100% 60%)", flexShrink: 0, position: "relative" }}>→</span>
+        </motion.a>
+      )}
 
       {/* Active predictions banner */}
       {(data?.activePredictionCount ?? 0) > 0 && (

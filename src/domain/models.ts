@@ -180,14 +180,15 @@ export type EntryPoints = {
 export type PredictionSet = {
   id: AppId;
   competitionId: AppId;
-  fixtureId: AppId;
-  type: "match_winner";
+  fixtureId: AppId | null;
+  label?: string | null;
+  type: "match_winner" | "bumper";
   status: "open" | "closed" | "scored";
   closesAt: Date;
   questions: Array<{
     id: AppId;
     prompt: string;
-    type?: "match_winner" | "btts" | "over_under_2_5" | "exact_score" | "red_card";
+    type?: "match_winner" | "btts" | "over_under_2_5" | "exact_score" | "red_card" | "champion" | "golden_boot" | "final_score";
     voteMode?: "fixed" | "dynamic";
     points: number;
     basePoints?: number;

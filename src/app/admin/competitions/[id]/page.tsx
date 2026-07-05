@@ -43,14 +43,16 @@ type OverviewData = {
 
 type AdminPredictionSet = {
   id: string;
-  fixtureId: string;
+  fixtureId: string | null;
+  label?: string | null;
   fixtureName?: string;
   fixtureStartTime?: string;
   fixtureStatus?: string;
+  type: string;
   status: string;
   closesAt: string;
   totalParticipants: number;
-  questions: Array<{ id: string; prompt: string; type?: string; points: number }>;
+  questions: Array<{ id: string; prompt: string; type?: string; points: number; options?: Array<{ label: string; value: string }> }>;
 };
 
 const SAMPLE_TEAMS = [
@@ -116,7 +118,7 @@ export default function CompetitionAdminPage() {
   const router = useRouter();
   const competitionId = params.id as string;
 
-  const [tab, setTab] = useState<"overview" | "competition" | "players" | "scoring" | "transfers" | "announcements" | "predictions">("overview");
+  const [tab, setTab] = useState<"overview" | "competition" | "players" | "scoring" | "transfers" | "announcements" | "predictions" | "bumper">("overview");
   const [predictions, setPredictions] = useState<AdminPredictionSet[]>([]);
   const [predLoading, setPredLoading] = useState(false);
   const [mappingPreview, setMappingPreview] = useState<{
@@ -160,6 +162,7 @@ export default function CompetitionAdminPage() {
 
   useEffect(() => {
     if (tab === "predictions") void loadPredictions();
+    if (tab === "bumper") void loadBumperSets();
   }, [tab]);
 
   async function loadOverview() {
@@ -473,6 +476,17 @@ export default function CompetitionAdminPage() {
   const [twCount, setTwCount] = useState(3);
   const [twHours, setTwHours] = useState(24);
 
+  // Bumper predictions state
+  const [bumperSets, setBumperSets] = useState<AdminPredictionSet[]>([]);
+  const [bumperLoading, setBumperLoading] = useState(false);
+  const [bumperClosesAt, setBumperClosesAt] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 16);
+  });
+  const [gbPlayerSearch, setGbPlayerSearch] = useState("");
+  const [gbSelectedIds, setGbSelectedIds] = useState<string[]>([]);
+  const [bumperScoring, setBumperScoring] = useState<Record<string, string>>({});
+  const [bumperScoreInputs, setBumperScoreInputs] = useState<Record<string, string>>({});
+
   async function setTransferWindow(active: boolean, resetUsage = false) {
     await run(`Transfer window ${active ? "opened" : "closed"}`, () =>
       apiFetch(`/api/admin/competitions/${competitionId}/transfer-window`, {
@@ -503,7 +517,42 @@ export default function CompetitionAdminPage() {
     void loadPredictions();
   }
 
-  const TABS = ["overview", "competition", "players", "scoring", "predictions", "transfers", "announcements"] as const;
+  async function loadBumperSets() {
+    setBumperLoading(true);
+    try {
+      const d = await apiFetch<{ bumperSets: AdminPredictionSet[] }>(
+        `/api/admin/competitions/${competitionId}/bumper-predictions`
+      );
+      setBumperSets(d.bumperSets);
+    } catch {
+      // silent
+    } finally {
+      setBumperLoading(false);
+    }
+  }
+
+  async function createBumperSet(bumperType: "champion" | "golden_boot" | "final_score") {
+    const LABELS: Record<string, string> = { champion: "Champion Predictor", golden_boot: "Golden Boot", final_score: "Final Score Predictor" };
+    const closesAt = new Date(bumperClosesAt).toISOString();
+    await run(`${LABELS[bumperType]} created`, async () => {
+      const body: Record<string, unknown> = { bumperType, label: LABELS[bumperType], closesAt };
+      if (bumperType === "golden_boot") body.playerIds = gbSelectedIds;
+      await apiFetch(`/api/admin/competitions/${competitionId}/bumper-predictions`, { method: "POST", body });
+      void loadBumperSets();
+    });
+  }
+
+  async function scoreBumperSet(setId: string, questionId: string, correctValue: string) {
+    await run("Bumper predictions scored", () =>
+      apiFetch(`/api/admin/predictions/${setId}/score`, {
+        method: "POST",
+        body: { correctValues: { [questionId]: correctValue } }
+      })
+    );
+    void loadBumperSets();
+  }
+
+  const TABS = ["overview", "competition", "players", "scoring", "predictions", "bumper", "transfers", "announcements"] as const;
 
   return (
     <div className="page">
@@ -1215,6 +1264,155 @@ export default function CompetitionAdminPage() {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Bumper Predictions ───────────────────────────────── */}
+      {tab === "bumper" && (
+        <div className="stack">
+          {/* Existing bumper sets */}
+          {!bumperLoading && bumperSets.length > 0 && (
+            <div className="card">
+              <div className="card-title">Bumper Prediction Sets</div>
+              <div style={{ display: "grid", gap: "12px" }}>
+                {bumperSets.map((bs) => {
+                  const q = bs.questions[0];
+                  const scoreInput = bumperScoreInputs[bs.id] ?? "";
+                  return (
+                    <div key={bs.id} style={{ padding: "14px 16px", borderRadius: 10, border: "1px solid rgba(255,200,0,0.2)", background: "rgba(255,200,0,0.04)", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                      <div style={{ flex: 1, minWidth: 180 }}>
+                        <div style={{ fontSize: "0.9rem", fontWeight: 700 }}>
+                          {bs.label ?? "Bumper"}
+                          {" "}
+                          <span style={{ fontSize: "0.75rem", color: "hsl(var(--ink-muted))", fontWeight: 400 }}>
+                            ({bs.totalParticipants} participant{bs.totalParticipants !== 1 ? "s" : ""})
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "0.78rem", color: "hsl(var(--ink-muted))", marginTop: 2 }}>
+                          {q?.type} · closes {new Date(bs.closesAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", padding: "3px 9px", borderRadius: 6, background: bs.status === "scored" ? "rgba(34,197,94,0.12)" : "rgba(255,200,0,0.12)", color: bs.status === "scored" ? "hsl(var(--success))" : "hsl(50,100%,60%)" }}>
+                          {bs.status}
+                        </span>
+                        {bs.status !== "scored" && q && (
+                          <>
+                            <select
+                              className="form-input"
+                              style={{ minHeight: 0, padding: "3px 8px", fontSize: "0.8rem", maxWidth: 200 }}
+                              value={scoreInput}
+                              onChange={(e) => setBumperScoreInputs((prev) => ({ ...prev, [bs.id]: e.target.value }))}
+                            >
+                              <option value="">— pick correct answer —</option>
+                              {q.options?.map((opt: { label: string; value: string }) => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                            <button
+                              className="btn btn-sm"
+                              disabled={!scoreInput || !!running}
+                              onClick={() => scoreBumperSet(bs.id, q.id, scoreInput)}
+                            >
+                              Score
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Shared closesAt */}
+          <div className="card">
+            <div className="card-title">Create Bumper Predictions</div>
+            <p className="card-muted" style={{ marginBottom: "16px" }}>
+              All bumper predictions automatically close before the Quarter Finals. Set the closes-at time once and create each predictor below.
+            </p>
+            <div className="form-group" style={{ maxWidth: 320, marginBottom: 20 }}>
+              <label className="form-label">Closes at (local time)</label>
+              <input
+                className="form-input"
+                type="datetime-local"
+                value={bumperClosesAt}
+                onChange={(e) => setBumperClosesAt(e.target.value)}
+              />
+            </div>
+
+            {/* Champion */}
+            {!bumperSets.some((b) => b.label === "Champion Predictor") && (
+              <div style={{ padding: "14px 16px", borderRadius: 10, border: "1px solid rgba(255,200,0,0.15)", marginBottom: 12, background: "rgba(255,200,0,0.03)" }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>Champion Predictor — 100 pts</div>
+                <p className="card-muted" style={{ marginBottom: 10 }}>
+                  Users pick which team will win the World Cup. Options are auto-populated from all teams in this competition.
+                </p>
+                <button className="btn" disabled={!!running} onClick={() => createBumperSet("champion")}>
+                  Create Champion Predictor
+                </button>
+              </div>
+            )}
+
+            {/* Golden Boot */}
+            {!bumperSets.some((b) => b.label === "Golden Boot") && (
+              <div style={{ padding: "14px 16px", borderRadius: 10, border: "1px solid rgba(255,200,0,0.15)", marginBottom: 12, background: "rgba(255,200,0,0.03)" }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>Golden Boot — 100 pts</div>
+                <p className="card-muted" style={{ marginBottom: 10 }}>
+                  Select eligible players for the Golden Boot (top scorer) contest.
+                </p>
+                <input
+                  className="form-input"
+                  placeholder="Search players…"
+                  value={gbPlayerSearch}
+                  onChange={(e) => setGbPlayerSearch(e.target.value)}
+                  style={{ maxWidth: 320, marginBottom: 10 }}
+                />
+                {data?.players
+                  .filter((p) => !gbPlayerSearch || p.name.toLowerCase().includes(gbPlayerSearch.toLowerCase()) || p.teamShortName?.toLowerCase().includes(gbPlayerSearch.toLowerCase()))
+                  .slice(0, 20)
+                  .map((p) => (
+                    <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: "0.85rem", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={gbSelectedIds.includes(p.id)}
+                        onChange={(e) => setGbSelectedIds((prev) => e.target.checked ? [...prev, p.id] : prev.filter((x) => x !== p.id))}
+                      />
+                      {p.name}
+                      {p.teamShortName && <span style={{ color: "hsl(var(--ink-muted))", fontSize: "0.78rem" }}>({p.teamShortName})</span>}
+                    </label>
+                  ))}
+                {gbSelectedIds.length > 0 && (
+                  <div style={{ marginTop: 10, fontSize: "0.8rem", color: "hsl(var(--ink-muted))" }}>
+                    {gbSelectedIds.length} player{gbSelectedIds.length !== 1 ? "s" : ""} selected
+                  </div>
+                )}
+                <div style={{ marginTop: 12 }}>
+                  <button className="btn" disabled={!!running || gbSelectedIds.length === 0} onClick={() => createBumperSet("golden_boot")}>
+                    Create Golden Boot
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Final Score */}
+            {!bumperSets.some((b) => b.label === "Final Score Predictor") && (
+              <div style={{ padding: "14px 16px", borderRadius: 10, border: "1px solid rgba(255,200,0,0.15)", background: "rgba(255,200,0,0.03)" }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>Final Score Predictor — 200 pts</div>
+                <p className="card-muted" style={{ marginBottom: 10 }}>
+                  Users pick total goals in the final (0–10). Exact = 200 pts, off-by-1 = 50 pts. Auto-generated options.
+                </p>
+                <button className="btn" disabled={!!running} onClick={() => createBumperSet("final_score")}>
+                  Create Final Score Predictor
+                </button>
+              </div>
+            )}
+
+            {bumperSets.length === 3 && (
+              <p className="notice" style={{ marginTop: 16 }}>All 3 bumper prediction sets are active.</p>
             )}
           </div>
         </div>

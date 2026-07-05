@@ -269,8 +269,8 @@ export function platformRepository() {
       async upsertSet(set: PredictionSet): Promise<PredictionSet> {
         const r = await prisma.predictionSet.upsert({
           where: { id: set.id },
-          update: { status: set.status, closesAt: set.closesAt, questions: set.questions as object[] },
-          create: { id: set.id, competitionId: set.competitionId, fixtureId: set.fixtureId, type: set.type, status: set.status, closesAt: set.closesAt, questions: set.questions as object[] }
+          update: { status: set.status, closesAt: set.closesAt, questions: set.questions as object[], label: set.label ?? undefined },
+          create: { id: set.id, competitionId: set.competitionId, fixtureId: set.fixtureId ?? undefined, label: set.label ?? undefined, type: set.type, status: set.status, closesAt: set.closesAt, questions: set.questions as object[] }
         });
         return { ...r, questions: j(r.questions) } as unknown as PredictionSet;
       },

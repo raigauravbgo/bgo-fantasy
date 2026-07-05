@@ -211,16 +211,17 @@ model EntryPoints {
 }
 
 model PredictionSet {
-  id            String   @id
+  id            String    @id
   competitionId String
-  fixtureId     String
-  type          String   @default("match_winner")
-  status        String   @default("open")
+  fixtureId     String?
+  label         String?
+  type          String    @default("match_winner")
+  status        String    @default("open")
   closesAt      DateTime
   questions     Json
 
   competition       Competition        @relation(fields: [competitionId], references: [id])
-  fixture           Fixture            @relation(fields: [fixtureId], references: [id])
+  fixture           Fixture?           @relation(fields: [fixtureId], references: [id])
   userPredictions   UserPrediction[]
   predictionResults PredictionResult[]
 }

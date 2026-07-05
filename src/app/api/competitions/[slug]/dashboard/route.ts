@@ -9,7 +9,7 @@ export async function GET(
     const user = await requireUser();
     const { slug } = await context.params;
     const { repo, competition } = await resolveCompetition(slug);
-    const [entry, entries, fixtures, entryPoints, predictionResults, announcements, activePredSets] =
+    const [entry, entries, fixtures, entryPoints, predictionResults, announcements, activePredSets, allSets] =
       await Promise.all([
         repo.entries.findByUser(competition.id, user.id),
         repo.entries.list(competition.id),
@@ -17,8 +17,14 @@ export async function GET(
         repo.points.listEntryPoints(competition.id),
         repo.predictions.listResults(competition.id),
         repo.announcements.listActive(competition.id),
-        repo.predictions.listActive(competition.id)
+        repo.predictions.listActive(competition.id),
+        repo.predictions.listSets(competition.id)
       ]);
+
+    const now = new Date();
+    const activeBumperSets = allSets.filter(
+      (s) => (s.type === "bumper" || !s.fixtureId) && s.status === "open" && new Date(s.closesAt) > now
+    );
 
     const squadPlayers = entry?.playerIds?.length
       ? await repo.players.findMany(entry.playerIds)
@@ -71,7 +77,8 @@ export async function GET(
       fixturePoints,
       lastFixture,
       lastMatchPoints,
-      activePredictionCount: activePredSets.length
+      activePredictionCount: activePredSets.length,
+      activeBumperCount: activeBumperSets.length
     });
   } catch (error) {
     return handleApiError(error);

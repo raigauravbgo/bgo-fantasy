@@ -166,4 +166,5 @@ export type DashboardData = {
   lastFixture?: Fixture | null;
   lastMatchPoints?: number | null;
   activePredictionCount?: number;
+  activeBumperCount?: number;
 };
