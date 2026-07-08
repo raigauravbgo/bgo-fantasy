@@ -45,16 +45,40 @@ function BumperCard({
   const q = set.questions[0];
   if (!q) return null;
 
+  const isPairType = q.type === "finalists" || q.type === "third_place_match";
   const isClosed = new Date(set.closesAt) <= new Date() || set.status === "scored" || set.status === "closed";
   const isScored = set.status === "scored";
   const myAnswer = q.myAnswer;
   const [search, setSearch] = useState("");
+  const [pairSelected, setPairSelected] = useState<string[]>(() =>
+    isPairType && myAnswer ? myAnswer.split("|") : []
+  );
+
+  useEffect(() => {
+    if (isPairType && myAnswer) setPairSelected(myAnswer.split("|"));
+  }, [isPairType, myAnswer]);
 
   const filteredOptions = q.type === "golden_boot" && search
     ? q.options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
     : q.options;
 
   const savingThis = saving === `${set.id}-${q.id}`;
+
+  const pairValue = pairSelected.length === 2 ? [...pairSelected].sort().join("|") : null;
+  const pairDirty = pairValue !== null && pairValue !== myAnswer;
+
+  function togglePair(teamId: string) {
+    setPairSelected((prev) => {
+      if (prev.includes(teamId)) return prev.filter((x) => x !== teamId);
+      if (prev.length >= 2) return [prev[1], teamId];
+      return [...prev, teamId];
+    });
+  }
+
+  // For pair types: decode myAnswer → team names
+  const pairLabels = isPairType && myAnswer
+    ? myAnswer.split("|").map((id) => q.options.find((o) => o.value === id)?.label ?? id)
+    : null;
 
   return (
     <motion.div
@@ -119,7 +143,6 @@ function BumperCard({
         </div>
 
         {myAnswer != null ? (
-          /* Already answered */
           <div style={{
             padding: "12px 16px",
             borderRadius: 10,
@@ -129,7 +152,9 @@ function BumperCard({
           }}>
             <div style={{ fontSize: "0.75rem", color: "hsl(var(--ink-muted))", marginBottom: 4 }}>Your pick</div>
             <div style={{ fontWeight: 700 }}>
-              {q.options.find((o) => o.value === myAnswer)?.label ?? myAnswer}
+              {pairLabels
+                ? pairLabels.join(" & ")
+                : (q.options.find((o) => o.value === myAnswer)?.label ?? myAnswer)}
             </div>
             {!isClosed && (
               <div style={{ fontSize: "0.75rem", color: "hsl(var(--ink-muted))", marginTop: 6 }}>
@@ -143,7 +168,6 @@ function BumperCard({
           </div>
         ) : null}
 
-        {/* Options — show for golden boot as search+dropdown, for others as grid */}
         {!isClosed && (
           <div style={{ marginTop: myAnswer != null ? 14 : 0 }}>
             {q.type === "golden_boot" ? (
@@ -184,7 +208,6 @@ function BumperCard({
                 </div>
               </>
             ) : q.type === "final_score" ? (
-              /* 0-10 button row */
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                 {q.options.map((opt) => (
                   <button
@@ -208,8 +231,52 @@ function BumperCard({
                   </button>
                 ))}
               </div>
+            ) : isPairType ? (
+              /* Pick exactly 2 teams */
+              <>
+                <div style={{ fontSize: "0.8rem", color: "hsl(var(--ink-muted))", marginBottom: 10 }}>
+                  Pick 2 teams ({pairSelected.length}/2 selected)
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8, marginBottom: 12 }}>
+                  {q.options.map((opt) => {
+                    const isSelected = pairSelected.includes(opt.value);
+                    return (
+                      <button
+                        key={opt.value}
+                        disabled={savingThis}
+                        onClick={() => togglePair(opt.value)}
+                        style={{
+                          padding: "10px 12px",
+                          borderRadius: 10,
+                          border: isSelected ? "2px solid hsl(45 100% 55%)" : "1px solid rgba(255,255,255,0.08)",
+                          background: isSelected ? "hsl(45 100% 55% / 0.15)" : "rgba(255,255,255,0.03)",
+                          color: isSelected ? "hsl(45 100% 60%)" : "hsl(var(--ink))",
+                          fontWeight: isSelected ? 700 : 400,
+                          cursor: "pointer",
+                          fontSize: "0.85rem",
+                          textAlign: "left",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {opt.label}
+                        {isSelected && <span style={{ marginLeft: 6 }}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                {pairDirty && pairValue && (
+                  <button
+                    className="btn"
+                    disabled={savingThis}
+                    onClick={() => onPick(set.id, q.id, pairValue)}
+                    style={{ background: "hsl(45 100% 55%)", color: "#000", fontWeight: 700 }}
+                  >
+                    {savingThis ? "Saving…" : "Confirm Selection"}
+                  </button>
+                )}
+              </>
             ) : (
-              /* Champion — flag grid */
+              /* Champion / third_place_winner — single team grid */
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8 }}>
                 {q.options.map((opt) => (
                   <button
@@ -311,42 +378,40 @@ export default function BumperPage() {
           🏆 Bumper Predictions
         </h1>
         <p className="page-subtitle">
-          Predict the Champions, Golden Boot, and Final Score for massive bonus points!
+          Predict the Champion, Golden Boot, Final Score, Finalists, and 3rd place — up to 650 bonus points!
         </p>
       </div>
 
       {/* Points summary */}
-      <div style={{
-        display: "flex",
-        gap: 12,
-        marginBottom: 24,
-        flexWrap: "wrap",
-      }}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
         {[
           { label: "Champion", pts: 100 },
           { label: "Golden Boot", pts: 100 },
           { label: "Final Score", pts: 200, note: "50 off-by-1" },
+          { label: "Finalists", pts: 100 },
+          { label: "3rd Place Match", pts: 100 },
+          { label: "3rd Place Winner", pts: 150 },
         ].map((item) => (
           <div
             key={item.label}
             style={{
-              flex: 1,
-              minWidth: 110,
-              padding: "12px 16px",
+              flex: "1 1 100px",
+              minWidth: 95,
+              padding: "10px 12px",
               borderRadius: 12,
               border: "1px solid hsl(45 100% 55% / 0.25)",
               background: "hsl(45 100% 55% / 0.06)",
               textAlign: "center",
             }}
           >
-            <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "hsl(45 100% 60%)" }}>
-              {item.pts} pts
+            <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "hsl(45 100% 60%)" }}>
+              {item.pts}
             </div>
-            <div style={{ fontSize: "0.8rem", color: "hsl(var(--ink))", fontWeight: 600, marginTop: 2 }}>
+            <div style={{ fontSize: "0.72rem", color: "hsl(var(--ink))", fontWeight: 600, marginTop: 2 }}>
               {item.label}
             </div>
             {item.note && (
-              <div style={{ fontSize: "0.7rem", color: "hsl(var(--ink-muted))", marginTop: 2 }}>
+              <div style={{ fontSize: "0.65rem", color: "hsl(var(--ink-muted))", marginTop: 2 }}>
                 {item.note}
               </div>
             )}

@@ -188,7 +188,7 @@ export type PredictionSet = {
   questions: Array<{
     id: AppId;
     prompt: string;
-    type?: "match_winner" | "btts" | "over_under_2_5" | "exact_score" | "red_card" | "champion" | "golden_boot" | "final_score";
+    type?: "match_winner" | "btts" | "over_under_2_5" | "exact_score" | "red_card" | "champion" | "golden_boot" | "final_score" | "finalists" | "third_place_match" | "third_place_winner";
     voteMode?: "fixed" | "dynamic";
     points: number;
     basePoints?: number;

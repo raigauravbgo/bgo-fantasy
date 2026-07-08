@@ -12,7 +12,7 @@ export type FixtureStats = {
 export type PredictionQuestion = {
   id: string;
   prompt: string;
-  type?: "match_winner" | "btts" | "over_under_2_5" | "exact_score" | "red_card" | "champion" | "golden_boot" | "final_score";
+  type?: "match_winner" | "btts" | "over_under_2_5" | "exact_score" | "red_card" | "champion" | "golden_boot" | "final_score" | "finalists" | "third_place_match" | "third_place_winner";
   voteMode?: "fixed" | "dynamic";
   points: number;      // max displayable (or exact for fixed)
   basePoints?: number; // dynamic formula base
@@ -210,7 +210,13 @@ export function scoreBumperPrediction(input: {
 
     for (const pred of qPreds) {
       let pts = 0;
-      if (pred.value === correctValue) {
+      // For pair types, sort both values before comparing so order doesn't matter
+      const normalise = (v: string) =>
+        (q.type === "finalists" || q.type === "third_place_match")
+          ? v.split("|").sort().join("|")
+          : v;
+
+      if (normalise(pred.value) === normalise(correctValue)) {
         pts = q.points;
       } else if (q.type === "final_score") {
         // off-by-1 on total goal count gets half points
