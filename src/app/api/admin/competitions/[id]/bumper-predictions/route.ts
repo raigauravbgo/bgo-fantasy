@@ -9,8 +9,7 @@ import type { PredictionSet } from "@/domain/models";
 const createSchema = z.object({
   bumperType: z.enum(["champion", "golden_boot", "final_score"]),
   label: z.string().min(1),
-  closesAt: z.string().datetime(),
-  playerIds: z.array(z.string()).optional()
+  closesAt: z.string().datetime()
 });
 
 const BUMPER_LABELS: Record<string, string> = {
@@ -87,11 +86,10 @@ export async function POST(
       prompt = "Which team will win the World Cup?";
       points = 100;
     } else if (input.bumperType === "golden_boot") {
-      if (!input.playerIds?.length) {
-        throw new RequestError("playerIds required for golden_boot bumper prediction", 400);
-      }
-      const players = await repo.players.findMany(input.playerIds);
-      options = players.map((p) => ({ label: p.name, value: p.id }));
+      const players = await repo.players.list(competitionId);
+      options = players
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((p) => ({ label: `${p.name}${p.teamShortName ? ` (${p.teamShortName})` : ""}`, value: p.id }));
       prompt = "Who will win the Golden Boot (top scorer)?";
       points = 100;
     } else {

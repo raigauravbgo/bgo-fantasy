@@ -482,9 +482,6 @@ export default function CompetitionAdminPage() {
   const [bumperClosesAt, setBumperClosesAt] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 16);
   });
-  const [gbPlayerSearch, setGbPlayerSearch] = useState("");
-  const [gbSelectedIds, setGbSelectedIds] = useState<string[]>([]);
-  const [bumperScoring, setBumperScoring] = useState<Record<string, string>>({});
   const [bumperScoreInputs, setBumperScoreInputs] = useState<Record<string, string>>({});
 
   async function setTransferWindow(active: boolean, resetUsage = false) {
@@ -535,9 +532,7 @@ export default function CompetitionAdminPage() {
     const LABELS: Record<string, string> = { champion: "Champion Predictor", golden_boot: "Golden Boot", final_score: "Final Score Predictor" };
     const closesAt = new Date(bumperClosesAt).toISOString();
     await run(`${LABELS[bumperType]} created`, async () => {
-      const body: Record<string, unknown> = { bumperType, label: LABELS[bumperType], closesAt };
-      if (bumperType === "golden_boot") body.playerIds = gbSelectedIds;
-      await apiFetch(`/api/admin/competitions/${competitionId}/bumper-predictions`, { method: "POST", body });
+      await apiFetch(`/api/admin/competitions/${competitionId}/bumper-predictions`, { method: "POST", body: { bumperType, label: LABELS[bumperType], closesAt } });
       void loadBumperSets();
     });
   }
@@ -1362,39 +1357,11 @@ export default function CompetitionAdminPage() {
               <div style={{ padding: "14px 16px", borderRadius: 10, border: "1px solid rgba(255,200,0,0.15)", marginBottom: 12, background: "rgba(255,200,0,0.03)" }}>
                 <div style={{ fontWeight: 700, marginBottom: 6 }}>Golden Boot — 100 pts</div>
                 <p className="card-muted" style={{ marginBottom: 10 }}>
-                  Select eligible players for the Golden Boot (top scorer) contest.
+                  All players in the competition are auto-populated. Users search from the full list to pick their top scorer.
                 </p>
-                <input
-                  className="form-input"
-                  placeholder="Search players…"
-                  value={gbPlayerSearch}
-                  onChange={(e) => setGbPlayerSearch(e.target.value)}
-                  style={{ maxWidth: 320, marginBottom: 10 }}
-                />
-                {data?.players
-                  .filter((p) => !gbPlayerSearch || p.name.toLowerCase().includes(gbPlayerSearch.toLowerCase()) || p.teamShortName?.toLowerCase().includes(gbPlayerSearch.toLowerCase()))
-                  .slice(0, 20)
-                  .map((p) => (
-                    <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: "0.85rem", cursor: "pointer" }}>
-                      <input
-                        type="checkbox"
-                        checked={gbSelectedIds.includes(p.id)}
-                        onChange={(e) => setGbSelectedIds((prev) => e.target.checked ? [...prev, p.id] : prev.filter((x) => x !== p.id))}
-                      />
-                      {p.name}
-                      {p.teamShortName && <span style={{ color: "hsl(var(--ink-muted))", fontSize: "0.78rem" }}>({p.teamShortName})</span>}
-                    </label>
-                  ))}
-                {gbSelectedIds.length > 0 && (
-                  <div style={{ marginTop: 10, fontSize: "0.8rem", color: "hsl(var(--ink-muted))" }}>
-                    {gbSelectedIds.length} player{gbSelectedIds.length !== 1 ? "s" : ""} selected
-                  </div>
-                )}
-                <div style={{ marginTop: 12 }}>
-                  <button className="btn" disabled={!!running || gbSelectedIds.length === 0} onClick={() => createBumperSet("golden_boot")}>
-                    Create Golden Boot
-                  </button>
-                </div>
+                <button className="btn" disabled={!!running} onClick={() => createBumperSet("golden_boot")}>
+                  Create Golden Boot
+                </button>
               </div>
             )}
 
