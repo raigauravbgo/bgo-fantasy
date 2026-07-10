@@ -13,6 +13,10 @@ export async function POST(
     const fixture = await repo.fixtures.findById(id);
     if (!fixture) throw new RequestError("Fixture not found", 404);
 
+    const existingSets = await repo.predictions.listSets(fixture.competitionId);
+    const existing = existingSets.find((s) => s.fixtureId === fixture.id && s.type === "match_winner");
+    if (existing) return json({ predictionSet: existing });
+
     const set = await repo.predictions.upsertSet(
       createMatchWinnerPredictionSet({
         competitionId: fixture.competitionId,
