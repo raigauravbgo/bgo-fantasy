@@ -257,7 +257,7 @@ export function platformRepository() {
       async listActive(competitionId: string): Promise<PredictionSet[]> {
         const now = new Date();
         const rows = await prisma.predictionSet.findMany({
-          where: { competitionId, status: "open", closesAt: { gt: now } },
+          where: { competitionId, status: "open", closesAt: { gt: now }, type: "match_winner" },
           orderBy: { closesAt: "asc" }
         });
         return rows.map((r) => ({ ...r, questions: j(r.questions) }) as unknown as PredictionSet);

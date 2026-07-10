@@ -15,7 +15,7 @@ export async function GET(
       repo.predictions.listResults(competition.id)
     ]);
 
-    const closedSets = allSets.filter((s) => s.status !== "open");
+    const closedSets = allSets.filter((s) => s.status !== "open" && s.type !== "bumper");
 
     const myPredictions = userPredictions.filter((p) => p.userId === user.id);
     const predsByKey: Record<string, string> = {};
