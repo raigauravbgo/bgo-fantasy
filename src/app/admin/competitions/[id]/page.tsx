@@ -176,7 +176,14 @@ export default function CompetitionAdminPage() {
       d.players = d.players.map((p) => ({ ...p, totalPoints: ptsByPlayer[p.id] ?? 0 }));
       setData(d);
       setFixtures(d.fixtures);
-      if (!selectedFixtureId && d.fixtures[0]) setSelectedFixtureId(d.fixtures[0].id);
+      if (!selectedFixtureId && d.fixtures.length) {
+        const best = [...d.fixtures].sort((a, b) =>
+          a.status !== "completed" && b.status === "completed" ? -1 :
+          a.status === "completed" && b.status !== "completed" ? 1 :
+          new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+        )[0];
+        setSelectedFixtureId(best.id);
+      }
     } catch (err) {
       setNotice({ type: "err", msg: err instanceof Error ? err.message : "Failed to load." });
     } finally {
