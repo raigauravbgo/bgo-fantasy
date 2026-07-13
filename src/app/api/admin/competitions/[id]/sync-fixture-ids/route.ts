@@ -14,29 +14,46 @@ const LEAGUE_ID_MAP: Record<string, number> = {
   DED: 88, PPL: 94, ELC: 40, BSA: 71, WC: 1,
 };
 
-// Both API-Football names AND football-data.org names → our TLA.
-// Covers cases where the two data sources use completely different names.
+// API-Football team names → our TLA (football-data.org standard codes).
 const NAME_TO_TLA: Record<string, string> = {
-  // API-Football → TLA
-  "turkiye": "TUR",
-  "ivory coast": "CIV",
-  "cape verde islands": "CPV",
-  "dr congo": "COD",
-  "ir iran": "IRN",
-  "korea republic": "KOR",
-  "south korea": "KOR",
+  // API-Football name variants
+  "turkiye": "TUR", "turkey": "TUR",
+  "ivory coast": "CIV", "cote d ivoire": "CIV", "cote divoire": "CIV",
+  "cape verde islands": "CPV", "cape verde": "CPV",
+  "dr congo": "COD", "democratic republic of the congo": "COD",
+  "ir iran": "IRN", "iran": "IRN",
+  "korea republic": "KOR", "south korea": "KOR",
   "chinese taipei": "TPE",
   "curacao": "CUW",
-  // football-data.org → TLA
-  "turkey": "TUR",
-  "cote d ivoire": "CIV",
-  "cote divoire": "CIV",
-  "cape verde": "CPV",
-  "democratic republic of the congo": "COD",
-  "iran": "IRN",
-  "republic of ireland": "IRL",
-  "northern ireland": "NIR",
-  "united states": "USA",
+  "republic of ireland": "IRL", "northern ireland": "NIR",
+  "united states": "USA", "usa": "USA",
+  "czech republic": "CZE", "czechia": "CZE",
+  "bosnia and herzegovina": "BIH", "bosnia": "BIH",
+  "saudi arabia": "KSA",
+  "south africa": "RSA",
+  "netherlands": "NED", "holland": "NED",
+  "new zealand": "NZL",
+  "trinidad and tobago": "TTO",
+  "costa rica": "CRC",
+  "el salvador": "SLV",
+  "north korea": "PRK",
+  "china pr": "CHN", "china": "CHN",
+  // Standard names that football-data.org TLAs differ from 3-letter name
+  "mexico": "MEX", "spain": "ESP", "france": "FRA", "germany": "GER",
+  "brazil": "BRA", "argentina": "ARG", "portugal": "POR", "england": "ENG",
+  "belgium": "BEL", "croatia": "CRO", "denmark": "DEN", "switzerland": "SUI",
+  "uruguay": "URU", "senegal": "SEN", "morocco": "MAR", "cameroon": "CMR",
+  "nigeria": "NGA", "ghana": "GHA", "egypt": "EGY", "algeria": "ALG",
+  "mali": "MLI", "guinea": "GUI", "tunisia": "TUN", "ethiopia": "ETH",
+  "australia": "AUS", "japan": "JPN", "qatar": "QAT", "canada": "CAN",
+  "scotland": "SCO", "wales": "WAL", "poland": "POL", "ukraine": "UKR",
+  "austria": "AUT", "serbia": "SRB", "romania": "ROU", "albania": "ALB",
+  "georgia": "GEO", "slovakia": "SVK", "slovenia": "SVN",
+  "colombia": "COL", "ecuador": "ECU", "paraguay": "PAR", "peru": "PER",
+  "chile": "CHI", "venezuela": "VEN", "bolivia": "BOL",
+  "honduras": "HON", "panama": "PAN", "jamaica": "JAM", "haiti": "HAI",
+  "iraq": "IRQ", "norway": "NOR", "sweden": "SWE", "indonesia": "IDN",
+  "uzbekistan": "UZB", "thailand": "THA", "vietnam": "VIE",
 };
 
 function normName(s: string): string {
@@ -94,13 +111,19 @@ export async function POST(
 
     if (!afFixtures.length) throw new RequestError("API-Football returned no fixtures", 502);
 
-    // Build a lookup: "YYYY-MM-DD|HOME_TLA|AWAY_TLA" → AF fixture ID
+    // Build a lookup keyed by both TLA and normalised full name so either can match.
     const afByKey = new Map<string, number>();
     for (const af of afFixtures) {
       const date = new Date(af.fixture.date).toISOString().slice(0, 10);
-      const home = teamToTla(af.teams.home.name);
-      const away = teamToTla(af.teams.away.name);
-      afByKey.set(`${date}|${home}|${away}`, af.fixture.id);
+      const homeTla = teamToTla(af.teams.home.name);
+      const awayTla = teamToTla(af.teams.away.name);
+      afByKey.set(`${date}|${homeTla}|${awayTla}`, af.fixture.id);
+      // Also store by normalised full name for cases where TLA lookup fails
+      const homeNorm = normName(af.teams.home.name);
+      const awayNorm = normName(af.teams.away.name);
+      if (homeNorm !== homeTla || awayNorm !== awayTla) {
+        afByKey.set(`${date}|${homeNorm}|${awayNorm}`, af.fixture.id);
+      }
     }
 
     const dbFixtures = await repo.fixtures.list(competitionId);
@@ -120,11 +143,17 @@ export async function POST(
       const tla1 = teamToTla(fix.team1Name ?? "", fix.team1ShortName);
       const tla2 = teamToTla(fix.team2Name ?? "", fix.team2ShortName);
 
+      const n1 = normName(fix.team1Name ?? "");
+      const n2 = normName(fix.team2Name ?? "");
+
       // Try same date first, then ±1 day (for timezone edge cases)
       let afId: number | undefined;
       for (let offset = 0; offset <= 1 && !afId; offset++) {
         const d = new Date(new Date(fix.startTime).getTime() + offset * 86_400_000).toISOString().slice(0, 10);
-        afId = afByKey.get(`${d}|${tla1}|${tla2}`);
+        afId = afByKey.get(`${d}|${tla1}|${tla2}`)       // TLA match
+            ?? afByKey.get(`${d}|${n1}|${n2}`)            // full-name match
+            ?? afByKey.get(`${d}|${tla1}|${n2}`)          // mixed
+            ?? afByKey.get(`${d}|${n1}|${tla2}`);         // mixed
       }
 
       if (afId) {
