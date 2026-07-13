@@ -32,11 +32,16 @@ type AfPlayer = {
 
 type AfFixture = {
   fixture: { id: number; date: string };
+  goals: { home: number | null; away: number | null };
   teams: {
     home: { id: number; name: string };
     away: { id: number; name: string };
   };
-  score: { fulltime: { home: number | null; away: number | null } };
+  score: {
+    fulltime: { home: number | null; away: number | null };
+    extratime: { home: number | null; away: number | null } | null;
+    penalty: { home: number | null; away: number | null } | null;
+  };
 };
 
 export type PlayerMapping = {
@@ -179,9 +184,12 @@ async function resolveMatchings(fixtureId: string, fixture: Fixture, apiKey: str
   const [afFixtureData] = await afFetch<AfFixture[]>(`/fixtures?id=${afFixtureId}`, apiKey);
   if (!afFixtureData) throw new RequestError(`API-Football fixture ${afFixtureId} not found`, 404);
 
-  const ftScore = afFixtureData.score.fulltime;
-  const homeGoals = ftScore.home ?? 0;
-  const awayGoals = ftScore.away ?? 0;
+  // Use top-level goals (final result inc. AET/pens) when available, fall back to fulltime.
+  const finalScore = afFixtureData.goals.home != null && afFixtureData.goals.away != null
+    ? afFixtureData.goals
+    : afFixtureData.score.fulltime;
+  const homeGoals = finalScore.home ?? 0;
+  const awayGoals = finalScore.away ?? 0;
 
   const teamStats = await afFetch<Array<{ team: { id: number; name: string }; players: AfPlayer[] }>>(
     `/fixtures/players?fixture=${afFixtureId}`, apiKey
