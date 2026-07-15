@@ -132,6 +132,8 @@ export async function POST(
     }));
     const savedTeams = await repo.teams.upsertMany(teamItems);
     const teamByTla = new Map(savedTeams.map((t) => [t.shortName, t]));
+    const normStr = (s: string) => s.normalize("NFD").replace(/\p{Mn}/gu, "").toLowerCase().trim();
+    const teamByName = new Map(savedTeams.map((t) => [normStr(t.name), t]));
 
     // 2. Build player list
     const playerItems = teamsData.teams.flatMap((fdTeam) => {
@@ -176,7 +178,7 @@ export async function POST(
     const seen = new Set<string>();
     const rawMatches: FdMatch[] = [];
     for (const m of [...scheduledRes.matches, ...timedRes.matches, ...finishedRes.matches]) {
-      const key = `${m.utcDate}|${m.homeTeam.tla}`;
+      const key = `${m.utcDate}|${m.homeTeam.tla ?? m.homeTeam.name ?? "unknown"}`;
       if (!seen.has(key)) { seen.add(key); rawMatches.push(m); }
     }
 
@@ -196,14 +198,19 @@ export async function POST(
 
     const skippedFixtures: Array<{ home: string; away: string; date: string; reason: string }> = [];
     const fixtureItems = rawMatches.flatMap((m) => {
-      const team1 = teamByTla.get(m.homeTeam.tla);
-      const team2 = teamByTla.get(m.awayTeam.tla);
+      // Try TLA first; fall back to normalised name for bracket slots where TLA may be null.
+      const team1 = (m.homeTeam.tla ? teamByTla.get(m.homeTeam.tla) : undefined)
+        ?? (m.homeTeam.name ? teamByName.get(normStr(m.homeTeam.name)) : undefined);
+      const team2 = (m.awayTeam.tla ? teamByTla.get(m.awayTeam.tla) : undefined)
+        ?? (m.awayTeam.name ? teamByName.get(normStr(m.awayTeam.name)) : undefined);
       if (!team1 || !team2) {
+        const homeMissing = !team1 ? (m.homeTeam.tla ?? m.homeTeam.name ?? "TBD") : "";
+        const awayMissing = !team2 ? (m.awayTeam.tla ?? m.awayTeam.name ?? "TBD") : "";
         skippedFixtures.push({
-          home: m.homeTeam.name,
-          away: m.awayTeam.name,
+          home: m.homeTeam.name ?? "",
+          away: m.awayTeam.name ?? "",
           date: m.utcDate,
-          reason: `Unknown TLA: ${!team1 ? m.homeTeam.tla : ""}${!team1 && !team2 ? ", " : ""}${!team2 ? m.awayTeam.tla : ""}`,
+          reason: `Unknown: ${[homeMissing, awayMissing].filter(Boolean).join(", ")}`,
         });
         return [];
       }
@@ -214,8 +221,8 @@ export async function POST(
         competitionId,
         team1Id: team1.id,
         team2Id: team2.id,
-        team1Name: m.homeTeam.name,
-        team2Name: m.awayTeam.name,
+        team1Name: m.homeTeam.name ?? team1.name,
+        team2Name: m.awayTeam.name ?? team2.name,
         status: m.status === "FINISHED" ? ("completed" as const) : m.status === "IN_PLAY" ? ("live" as const) : ("upcoming" as const),
         startTime,
         venue: m.venue ?? undefined
@@ -255,6 +262,6 @@ type FdTeam = {
 };
 type FdMatch = {
   utcDate: string; status: string; venue: string | null;
-  homeTeam: { tla: string; name: string };
-  awayTeam: { tla: string; name: string };
+  homeTeam: { tla: string | null; name: string | null };
+  awayTeam: { tla: string | null; name: string | null };
 };
