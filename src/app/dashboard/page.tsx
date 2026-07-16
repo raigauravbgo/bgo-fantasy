@@ -233,13 +233,10 @@ export default function DashboardPage() {
         let countdown: string | null = null;
         if (tw.closesAt) {
           const msLeft = new Date(tw.closesAt).getTime() - Date.now();
-          if (msLeft > 0) {
-            const hrs = Math.floor(msLeft / 3_600_000);
-            const mins = Math.floor((msLeft % 3_600_000) / 60_000);
-            countdown = hrs > 0 ? `${hrs}h ${mins}m remaining` : `${mins}m remaining`;
-          } else {
-            countdown = "Closing soon";
-          }
+          if (msLeft <= 0) return null;
+          const hrs = Math.floor(msLeft / 3_600_000);
+          const mins = Math.floor((msLeft % 3_600_000) / 60_000);
+          countdown = hrs > 0 ? `${hrs}h ${mins}m remaining` : `${mins}m remaining`;
         }
         return (
           <>
